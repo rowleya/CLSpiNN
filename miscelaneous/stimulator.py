@@ -3,7 +3,7 @@ import os
 import time
 import numpy as np
 import math
-import cv2
+# import cv2
 
 
 
@@ -97,13 +97,11 @@ def update_pixel_frame(bball, LED_on):
     
     return mat
 
-def produce_data(l, w, r, duration):
+def produce_data(l, w, r, vx, vy, duration):
 
     dt = 1 # ms
     cx = int(2*l/4)
     cy = int(2*w/4)
-    vx =  0.05
-    vy = -0.10
 
     data_file_title = "ball_{:d}x{:d}_r{:d}_{:d}s.npy".format(l, w, r, duration)
 
@@ -115,7 +113,7 @@ def produce_data(l, w, r, duration):
     
     bball = BouncingBall(dt, w, l, r, cx, cy, vx, vy)
 
-    fps = 50
+    fps = 100
     LED_f = 100
     ball_update = 0
     LED_update = 0
@@ -140,9 +138,12 @@ def produce_data(l, w, r, duration):
         if ball_update >= 1000/fps:
             ball_update = 0      
             bball.update_c()
-            print("\r{:.1f} %".format(np.round(t/(duration*1000),3)*100), end="")
-            cv2.imshow("Pixel Space", mat[:,:,t]*255)
-            cv2.waitKey(1) 
+            # print("\r{:.1f} %".format(np.round(t/(duration*1000),3)*100), end="")
+
+            # im_final = cv2.resize(mat[:,:,t]*255,(640,480), interpolation = cv2.INTER_NEAREST)
+            # cv2.imshow("Pixel Space", im_final)
+            # # cv2.imshow("Pixel Space", mat[:,:,t]*255)
+            # cv2.waitKey(1) 
         
         coor[0,t] = bball.cx
         coor[1,t] = bball.cy

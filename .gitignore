@@ -2,4 +2,5 @@
 application_generated_data_files
 examples
 reports
+*.pyc
 __pycache__
