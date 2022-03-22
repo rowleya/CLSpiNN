@@ -2,12 +2,81 @@ import spynnaker8 as p
 from pyNN.space import Grid2D
 import socket
 import pdb
+import math
 import numpy as np
 from random import randint, random
 from struct import pack
 from time import sleep
 from spinn_front_end_common.utilities.database import DatabaseConnection
 from threading import Thread
+
+
+
+# class FromListConnector(conn_list, column_names=None, safe=True, callback=None)
+# Make connections according to a list.
+
+# Arguments:
+# conn_list:
+# a list of tuples, one tuple for each connection. 
+# Each tuple should contain: (pre_idx, post_idx, p1, p2, ..., pn) 
+# where pre_idx is the index (i.e. order in the Population, not the ID) 
+# of the presynaptic neuron, post_idx is the index of the postsynaptic neuron, 
+# and p1, p2, etc. are the synaptic params (e.g. weight, delay, plasticity params)
+#
+# column_names:
+# the names of the params p1, p2, etc. If not provided, it is assumed the params 
+# are ‘weight’, ‘delay’ (for backwards compatibility).
+#
+# safe:
+# if True, check that weights and delays have valid values. If False, this check is skipped.
+#
+# callback:
+# if True, display a progress bar on the terminal.
+
+print("\n\n\n\n\n\n\n")
+
+def create_conn_list(w, h):
+    w_fovea = 100
+    conn_list = []
+    
+
+    delay = 1 # 1 [ms]
+    for y in range(h):
+        for x in range(w):
+            pre_idx = y*w+x
+
+            for post_idx in range(4):
+
+                weight = 0.000001
+                x_weight = 2*w_fovea*(abs((x+0.5)-w/2)/(w-1))
+                y_weight = 2*w_fovea*(abs((y+0.5)-h/2)/(h-1))
+
+                # Move right (when stimulus on the left 'hemisphere')    
+                if post_idx == 0:
+                    if (x+0.5) < w/2:
+                        weight = x_weight
+                            
+                # Move Left (when stimulus on the right 'hemisphere')
+                if post_idx == 1:
+                    if (x+0.5) > w/2:
+                        weight = x_weight
+                                    
+                # Move up (when stimulus on the bottom 'hemisphere')    
+                if post_idx == 2: 
+                    if (y+0.5) < h/2: # higher pixel --> bottom of image
+                        weight = y_weight
+                
+                # Move down (when stimulus on the top 'hemisphere') 
+                if post_idx == 3:
+                    if (y+0.5) > h/2: # lower pixel --> top of image
+                        weight = y_weight
+                
+                conn_list.append((pre_idx, post_idx, weight, delay))
+        
+
+
+    return conn_list
+
 
 # Device parameters are "pipe", "chip_coords", "ip_address", "port"
 # Note: IP address and port are used to send in spikes when send_fake_spikes
@@ -31,7 +100,7 @@ Y_SHIFT = 0
 X_SHIFT = 16
 
 if send_fake_spikes:
-    WIDTH = 8
+    WIDTH = 16
     HEIGHT = int(WIDTH*3/4)
 else:
     WIDTH = 346
@@ -101,14 +170,29 @@ def start_fake_senders():
         t.start()
 
 
+cell_params = {'tau_m': 20.0,
+               'tau_syn_E': 5.0,
+               'tau_syn_I': 5.0,
+               'v_rest': -65.0,
+               'v_reset': -65.0,
+               'v_thresh': -50.0,
+               'tau_refrac': 0.0, # 0.1 originally
+               'cm': 1,
+               'i_offset': 0.0
+               }
 
+celltype = p.IF_curr_exp
 
 # Set up PyNN
-p.setup(1.0, n_boards_required=24)
+
+
+p.setup(timestep=1.0, n_boards_required=1)     
+# p.set_number_of_neurons_per_core(p.IF_curr_exp, 100) #  100 neurons per core
 
 # Set the number of neurons per core to a rectangle
 # (creates 512 neurons per core)
-p.set_number_of_neurons_per_core(p.IF_curr_exp, (SUB_WIDTH, SUB_HEIGHT))
+p.set_number_of_neurons_per_core(p.IF_curr_exp, SUB_HEIGHT*SUB_WIDTH)
+# p.set_number_of_neurons_per_core(p.IF_curr_exp, (SUB_WIDTH, SUB_HEIGHT))
 
 if send_fake_spikes:
     # This is only used with the above to send data to the Ethernet
@@ -143,17 +227,38 @@ for i, (pipe, chip_coords, _, _) in enumerate(DEVICE_PARAMETERS):
     captures.append(capture)
 
 
+m_labels = ["go_right", "go_left", "go_up", "go_down"]
+       
+
+
+motor_neurons = p.Population(4, celltype(**cell_params), label="motor_neurons")
+motor_neurons.record("spikes")
+
+conn_list = create_conn_list(WIDTH, HEIGHT)
+
+for conn in conn_list:
+    x = conn[0]%WIDTH
+    y = math.floor(conn[0]/WIDTH)
+    print(f"({x},{y}) : {conn[0]}\t-->\t{conn[1]} : w={conn[2]}")
+
+
+cell_conn = p.FromListConnector(conn_list, safe=True)
+con_move = []
+con_move.append({ 'blah': p.Projection(capture, motor_neurons, cell_conn, receptor_type='excitatory')})
+
+pdb.set_trace()
+
+    
 
 # Run the simulation for long enough for packets to be sent
 p.run(run_time)
 
 
 # # Get out the spikes
-capture_spikes = np.asarray(capture.get_data("spikes").segments[0].spiketrains)
 
 in_spikes = capture.get_data("spikes")
+out_spikes = motor_neurons.get_data("spikes")
 
-in_spikes = capture.get_data("spikes")
 for h in range(HEIGHT):
     for w in range(WIDTH):
         l = len(np.asarray(in_spikes.segments[0].spiketrains[h*WIDTH+w]))
