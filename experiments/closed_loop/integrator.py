@@ -29,7 +29,7 @@ Y_SHIFT = 0
 X_SHIFT = 16
 
 if send_fake_spikes:
-    WIDTH = 16
+    WIDTH = 8
     HEIGHT = int(WIDTH*3/4)
 else:
     WIDTH = 346
@@ -53,7 +53,7 @@ N_PACKETS = 10
 RUN_TIME = 10000 #[ms]
 
 if send_fake_spikes:
-    RUN_TIME = (2*N_PACKETS + 1) * SLEEP_TIME * 1000
+    RUN_TIME = (2*4*N_PACKETS + 1) * SLEEP_TIME * 1000
 
 
 print(f"SPIF : {DEVICE_PARAMETERS[2]}:{DEVICE_PARAMETERS[3]}")
@@ -138,22 +138,26 @@ def send_retina_input(ip_addr, port):
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     count = 0
-    x = int(WIDTH*1/4)
-    y = int(HEIGHT*1/4)
-    for _ in range(N_PACKETS):
-        n_spikes = 10
-        data = b""
-        for _ in range(n_spikes):
-            packed = (
-                NO_TIMESTAMP + (polarity << P_SHIFT) +
-                (y << Y_SHIFT) + (x << X_SHIFT))
-            print(f"Sending x={x}, y={y}, polarity={polarity}, "
-                  f"packed={hex(packed)}")
-            count+= 1
 
-            data += pack("<I", packed)
-        sock.sendto(data, (ip_addr, port))
-        sleep(SLEEP_TIME)
+    combi = [(3,3),(1,3),(3,1),(1,1)]
+    for k in range(4):
+        x = int(WIDTH*combi[k][0]/4)
+        y = int(HEIGHT*combi[k][1]/4)
+        for _ in range(N_PACKETS):
+            n_spikes = 10
+            data = b""
+            for _ in range(n_spikes):
+                packed = (
+                    NO_TIMESTAMP + (polarity << P_SHIFT) +
+                    (y << Y_SHIFT) + (x << X_SHIFT))
+                print(f"Sending x={x}, y={y}, polarity={polarity}, "
+                    f"packed={hex(packed)}")
+                count+= 1
+
+                data += pack("<I", packed)
+            sock.sendto(data, (ip_addr, port))
+            sleep(SLEEP_TIME)
+
     print(f"count is --> {count}")
 
 
@@ -252,10 +256,8 @@ def run_spinnaker_sim(end_of_sim, input_q, output_q):
 
 
     cell_conn = p.FromListConnector(conn_list, safe=True)
-    con_move = []
-    con_move.append({ 'blah': p.Projection(capture, motor_neurons, cell_conn, receptor_type='excitatory')})
-
-
+    
+    con_move = p.Projection(capture, motor_neurons, cell_conn, receptor_type='excitatory')
 
     # Spike reception (from SpiNNaker to CPU)
 
@@ -284,7 +286,7 @@ def run_spinnaker_sim(end_of_sim, input_q, output_q):
             l = len(np.asarray(in_spikes.segments[0].spiketrains[h*WIDTH+w]))
             print(f"({w},{h})-->{l}")
 
-
+    w_array = np.array(con_move.get("weight", format="array"))
     # pdb.set_trace()
 
 
@@ -405,7 +407,7 @@ if __name__ == '__main__':
     p_o_data = multiprocessing.Process(target=get_outputs, args=(end_of_sim, output_q,))
     p_spinn = multiprocessing.Process(target=run_spinnaker_sim, args=(end_of_sim, input_q, output_q,))
     
-    # run_spinnaker_sim(input_q, output_q)
+    # run_spinnaker_sim(end_of_sim, input_q, output_q)
 
     p_i_data.start()
     p_o_data.start()
