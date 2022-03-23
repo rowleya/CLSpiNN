@@ -27,6 +27,16 @@ import multiprocessing
 
 global end_of_sim, input_q, output_q, visual_q
 
+for  i in [8,16,32,64,128,256,512,640]:
+    WIDTH = i
+    HEIGHT = int(i*3/4)
+    SUB_HEIGHT = 2**math.ceil(math.log(math.ceil(math.log(max(2,int(HEIGHT*WIDTH/256)),2)),2))
+    SUB_WIDTH = 2*SUB_HEIGHT
+    total_neurons = WIDTH*HEIGHT
+    neurons_per_core = SUB_HEIGHT*SUB_WIDTH
+    nb_cores = math.ceil(total_neurons / neurons_per_core)
+    print(f"For {WIDTH}x{HEIGHT} {nb_cores} cores with {neurons_per_core} neurons (for a total of {total_neurons} neurons)")
+
 #################################################################################################################################
 #                                                           SPIF SETUP                                                          #
 #################################################################################################################################
@@ -43,31 +53,27 @@ X_SHIFT = 16
 
 if send_fake_spikes:
     WIDTH = 8
-    HEIGHT = int(WIDTH*3/4)
+    HEIGHT = WIDTH
 else:
     WIDTH = 346
     HEIGHT = 260
 # Creates 512 neurons per core
-SUB_HEIGHT = 2**math.ceil(math.log(max(2,int(HEIGHT/20)),2))
+SUB_HEIGHT = max(2,2**math.ceil(math.log(math.ceil(math.log(max(2,int(HEIGHT*WIDTH/256)),2)),2)))
 SUB_WIDTH = 2*SUB_HEIGHT
 
-print(f"Creating {SUB_WIDTH*SUB_HEIGHT} neurons per core")
+print(f"Creating {SUB_WIDTH}*{SUB_HEIGHT}={SUB_WIDTH*SUB_HEIGHT} neurons per core")
 
 # Weight of connections between "layers"
-WEIGHT = 10
+WEIGHT = 100
 
 
 
 # Used if send_fake_spikes is True
 SLEEP_TIME = 0.005
-N_PACKETS = 500
+N_PACKETS = 1000
 
 # Run time if send_fake_spikes is False
-RUN_TIME = 10000 #[ms]
-
-if send_fake_spikes:
-    RUN_TIME = (1 + (2*8*N_PACKETS + 1) * SLEEP_TIME) * 1000
-
+RUN_TIME = 5000 #[ms]
 
 print(f"SPIF : {DEVICE_PARAMETERS[2]}:{DEVICE_PARAMETERS[3]}")
 print(f"Pixel Matrix : {WIDTH}x{HEIGHT} (Real={not send_fake_spikes})")
@@ -144,38 +150,60 @@ def create_conn_list(w, h):
     return conn_list
 
 
-def send_retina_input(ip_addr, port):
-    """ This is used to send random input to the Ethernet listening in SPIF
+
+
+def new_send_retina_input(ip_addr, port):
+
+    global end_of_sim
+
+    """ 
+    This is used to send random input to the Ethernet listening in SPIF
     """
     global X_SHIFT, Y_SHIFT, P_SHIFT, SLEEP_TIME, N_PACKETS
     NO_TIMESTAMP = 0x80000000
     polarity = 1
 
-    sleep(0.5 + (random() / 4.0))
-
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    count = 0
+    q_idx = 0
+    quadrant = [(3,3),(1,3),(3,1),(1,1)]
 
-    combi = [(3,3),(1,3),(3,1),(1,1),(3,3),(1,3),(3,1),(1,1)]
-    for k in range(4):
-        x = int(WIDTH*combi[k][0]/4)
-        y = int(HEIGHT*combi[k][1]/4)
-        for _ in range(N_PACKETS):
-            n_spikes = 10
-            data = b""
-            for _ in range(n_spikes):
-                packed = (
-                    NO_TIMESTAMP + (polarity << P_SHIFT) +
-                    (y << Y_SHIFT) + (x << X_SHIFT))
-                # print(f"Sending x={x}, y={y}, polarity={polarity}, "
-                #     f"packed={hex(packed)}")
-                count+= 1
 
-                data += pack("<I", packed)
-            sock.sendto(data, (ip_addr, port))
-            sleep(SLEEP_TIME)
+    dt = 1 # in seconds
+    
+    start = time.time()
+    current_t = time.time()
+    next_check = current_t + dt
 
-    print(f"count is --> {count}")
+    n_spikes = 10
+    while True:
+
+        # Check if the spinnaker simulation has ended
+        if end_of_sim.value == 1:
+            time.sleep(1)
+            print("No more events to be created")
+            break
+        
+        current_t = time.time()
+        if current_t >= next_check:
+            # update q_idx
+            q_idx += 1
+            print(f"@ t = {current_t} move to quadrant #{q_idx%4}")
+            next_check = current_t + dt
+        
+        x = int(WIDTH*quadrant[q_idx%4][0]/4)
+        y = int(HEIGHT*quadrant[q_idx%4][1]/4)
+        data = b""
+        for _ in range(n_spikes):
+            packed = (
+                NO_TIMESTAMP + (polarity << P_SHIFT) +
+                (y << Y_SHIFT) + (x << X_SHIFT))
+            # print(f"Sending x={x}, y={y}, polarity={polarity}, "
+            #     f"packed={hex(packed)}")
+
+            data += pack("<I", packed)
+        sock.sendto(data, (ip_addr, port))
+        sleep(0.010) # Every 1ms one packet of n_spikes is created
+
 
 
 def start_fake_senders():
@@ -185,7 +213,7 @@ def start_fake_senders():
     ip_addr = DEVICE_PARAMETERS[2]
     port = DEVICE_PARAMETERS[3]
     
-    t = multiprocessing.Process(target=send_retina_input, args=(ip_addr, port,))
+    t = multiprocessing.Process(target=new_send_retina_input, args=(ip_addr, port,))
     t.start()
         
 
@@ -223,6 +251,9 @@ def run_spinnaker_sim():
     if send_fake_spikes:
         # This is only used with the above to send data to the Ethernet
         connection = DatabaseConnection(start_fake_senders, local_port=None)
+
+        print(f"DB Connection port = {connection.local_port}")
+        # time.sleep(5)
 
         # This is used with the connection so that it starts sending when the simulation starts
         p.external_devices.add_database_socket_address(None, connection.local_port, None)
@@ -267,10 +298,11 @@ def run_spinnaker_sim():
 
 
 
-    for conn in conn_list:
-        x = conn[0]%WIDTH
-        y = math.floor(conn[0]/WIDTH)
-        print(f"({x},{y}) : {conn[0]}\t-->\t{conn[1]} : w={conn[2]}")
+    if WIDTH < 10:
+        for conn in conn_list:
+            x = conn[0]%WIDTH
+            y = math.floor(conn[0]/WIDTH)
+            print(f"({x},{y}) : {conn[0]}\t-->\t{conn[1]} : w={conn[2]}")
 
 
     cell_conn = p.FromListConnector(conn_list, safe=True)
@@ -304,16 +336,17 @@ def run_spinnaker_sim():
     #         l = len(np.asarray(in_spikes.segments[0].spiketrains[h*WIDTH+w]))
     #         print(f"({w},{h})-->{l}")
 
-    # w_array = np.array(con_move.get("weight", format="array"))
+    w_array = np.array(con_move.get("weight", format="array"))
+
+
+    # Let other processes know that spinnaker simulation has come to an ned
+    end_of_sim.value = 1
+
     # pdb.set_trace()
-
-
 
     # Tell the software we are done with the board
     p.end()
 
-    # Let other processes know that spinnaker simulation has come to an ned
-    end_of_sim.value = 1
 
 
 def produce_data(l, w, r, vx, vy, duration):
@@ -429,12 +462,12 @@ def get_outputs():
             spike_times[out].append(elapsed_t)
         
         if current_t >= next_check:
-            print(f"Checking @ t={current_t}")
+            # print(f"Checking @ t={current_t}")
             next_check = current_t + dt
             for i in range(4):  # 4 motor neurons
                 train = np.array(spike_times[i])
                 short_train = train[train>(current_t-dt-start)*1000]
-                print(f"For MN[{i}]: {len(train)} >= {len(short_train)} (Train vs Short Train)")
+                # print(f"For MN[{i}]: {len(train)} >= {len(short_train)} (Train vs Short Train)")
                 spike_count[i] = len(short_train)
             visual_q.put(spike_count, False)
 
@@ -446,7 +479,7 @@ def rt_plot(i, axs, t, mn_r, mn_l, mn_u, mn_d, spike_count):
 
     while not visual_q.empty():
         spike_count = visual_q.get(False)
-        print(spike_count)
+        # print(spike_count)
 
     # Add x and y to lists
     t.append(datetime.datetime.now().strftime('%H:%M:%S.%f'))
@@ -478,28 +511,28 @@ def rt_plot(i, axs, t, mn_r, mn_l, mn_u, mn_d, spike_count):
 
     axs[0].clear()
     axs[0].plot(t, mn_r, color='r')
-    axs[0].text(t[0], 0.5*max_y, txt_r, fontsize='xx-large')
+    axs[0].text(t[0], 0.75*max_y, txt_r, fontsize='xx-large')
     axs[0].xaxis.set_visible(False)
     axs[0].set_ylabel('mn_r')
     axs[0].set_ylim([0,max_y])
 
     axs[1].clear()
     axs[1].plot(t, mn_l, color='g')
-    axs[1].text(t[0], 0.5*max_y, txt_l, fontsize='xx-large')
+    axs[1].text(t[0], 0.75*max_y, txt_l, fontsize='xx-large')
     axs[1].xaxis.set_visible(False)
     axs[1].set_ylabel('mn_l')
     axs[1].set_ylim([0,max_y])
 
     axs[2].clear()
     axs[2].plot(t, mn_u, color='r')
-    axs[2].text(t[0], 0.5*max_y, txt_u, fontsize='xx-large')
+    axs[2].text(t[0], 0.75*max_y, txt_u, fontsize='xx-large')
     axs[2].xaxis.set_visible(False)
     axs[2].set_ylabel('mn_u')
     axs[2].set_ylim([0,max_y])
 
     axs[3].clear()
     axs[3].plot(t, mn_d, color='g')
-    axs[3].text(t[0], 0.5*max_y, txt_d, fontsize='xx-large')
+    axs[3].text(t[0], 0.75*max_y, txt_d, fontsize='xx-large')
     axs[3].xaxis.set_visible(False)
     axs[3].set_ylabel('mn_d')
     axs[3].set_ylim([0,max_y])
@@ -514,7 +547,7 @@ def oscilloscope():
     print("Starting Oscilloscope")
 
     # Create figure for plotting
-    fig, axs = plt.subplots(4, figsize=(8.72, 6.18))
+    fig, axs = plt.subplots(4, figsize=(6, 8))
     fig.canvas.manager.set_window_title('World Space')
 
 
@@ -535,6 +568,10 @@ if __name__ == '__main__':
 
     global end_of_sim, input_q, output_q,  visual_q
     
+    print("\n About to start things ... \n")
+
+    time.sleep(3)
+
     manager = multiprocessing.Manager()
 
     end_of_sim = manager.Value('i', 0)
@@ -548,17 +585,17 @@ if __name__ == '__main__':
     p_i_data = multiprocessing.Process(target=set_inputs, args=())
     p_o_data = multiprocessing.Process(target=get_outputs, args=())
     p_visual = multiprocessing.Process(target=oscilloscope, args=())
-    p_spinn = multiprocessing.Process(target=run_spinnaker_sim, args=())
+    # p_spinn = multiprocessing.Process(target=run_spinnaker_sim, args=())
     
-    # run_spinnaker_sim(end_of_sim, input_q, output_q)
 
     p_i_data.start()
     p_o_data.start()
     p_visual.start()
-    p_spinn.start()
+    # p_spinn.start()
 
+    run_spinnaker_sim()
 
     p_i_data.join()
     p_o_data.join()
-    p_spinn.join()
     p_visual.join()
+    # p_spinn.join()
