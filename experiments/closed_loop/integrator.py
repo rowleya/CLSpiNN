@@ -3,6 +3,10 @@ from pyNN.space import Grid2D
 import socket
 import pdb
 import math
+import collections
+
+# import cv2
+
 import datetime
 import time
 import numpy as np
@@ -12,7 +16,16 @@ from time import sleep
 from spinn_front_end_common.utilities.database import DatabaseConnection
 from threading import Thread
 
+import matplotlib
+matplotlib.use("TkAgg")
+matplotlib.rcParams['toolbar'] = 'None' 
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+
 import multiprocessing 
+
+
+global end_of_sim, input_q, output_q, visual_q
 
 #################################################################################################################################
 #                                                           SPIF SETUP                                                          #
@@ -35,7 +48,7 @@ else:
     WIDTH = 346
     HEIGHT = 260
 # Creates 512 neurons per core
-SUB_HEIGHT = max(2,int(HEIGHT/20))
+SUB_HEIGHT = 2**math.ceil(math.log(max(2,int(HEIGHT/20)),2))
 SUB_WIDTH = 2*SUB_HEIGHT
 
 print(f"Creating {SUB_WIDTH*SUB_HEIGHT} neurons per core")
@@ -46,14 +59,14 @@ WEIGHT = 10
 
 
 # Used if send_fake_spikes is True
-SLEEP_TIME = 0.1
-N_PACKETS = 10
+SLEEP_TIME = 0.005
+N_PACKETS = 500
 
 # Run time if send_fake_spikes is False
 RUN_TIME = 10000 #[ms]
 
 if send_fake_spikes:
-    RUN_TIME = (2*4*N_PACKETS + 1) * SLEEP_TIME * 1000
+    RUN_TIME = (1 + (2*8*N_PACKETS + 1) * SLEEP_TIME) * 1000
 
 
 print(f"SPIF : {DEVICE_PARAMETERS[2]}:{DEVICE_PARAMETERS[3]}")
@@ -78,8 +91,12 @@ def get_port(first_val):
 This is what's done whenever the CPU receives a spike sent by SpiNNaker
 '''
 def receive_spikes_from_sim(label, time, neuron_ids):
-    print("1 for " + label)
-    print(neuron_ids)
+
+    global end_of_sim, input_q, output_q
+    
+    for n_id in neuron_ids:
+        # print(f"Spike --> MN[{n_id}]")
+        output_q.put(n_id, False)
 
 ''' 
 This function creates a list of weights to be used when connecting pixels to motor neurons
@@ -139,7 +156,7 @@ def send_retina_input(ip_addr, port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     count = 0
 
-    combi = [(3,3),(1,3),(3,1),(1,1)]
+    combi = [(3,3),(1,3),(3,1),(1,1),(3,3),(1,3),(3,1),(1,1)]
     for k in range(4):
         x = int(WIDTH*combi[k][0]/4)
         y = int(HEIGHT*combi[k][1]/4)
@@ -150,8 +167,8 @@ def send_retina_input(ip_addr, port):
                 packed = (
                     NO_TIMESTAMP + (polarity << P_SHIFT) +
                     (y << Y_SHIFT) + (x << X_SHIFT))
-                print(f"Sending x={x}, y={y}, polarity={polarity}, "
-                    f"packed={hex(packed)}")
+                # print(f"Sending x={x}, y={y}, polarity={polarity}, "
+                #     f"packed={hex(packed)}")
                 count+= 1
 
                 data += pack("<I", packed)
@@ -177,8 +194,9 @@ def start_fake_senders():
 #                                                        SPINNAKER SETUP                                                        #
 #################################################################################################################################
 
-def run_spinnaker_sim(end_of_sim, input_q, output_q):
+def run_spinnaker_sim():
 
+    global end_of_sim, input_q, output_q
     global DEVICE_PARAMETERS, P_SHIFT, Y_SHIFT, X_SHIFT, SUB_HEIGHT, SUB_WIDTH, WEIGHT, RUN_TIME
 
     cell_params = {'tau_m': 20.0,
@@ -229,7 +247,7 @@ def run_spinnaker_sim(end_of_sim, input_q, output_q):
     p.Projection(dev, capture, capture_conn, p.Convolution())
 
     # Record the spikes so we know what happened
-    capture.record("spikes")
+    # capture.record("spikes")
 
     # Save for later use
     devices.append(dev)
@@ -243,7 +261,7 @@ def run_spinnaker_sim(end_of_sim, input_q, output_q):
     motor_neurons = p.Population(4, celltype(**cell_params), label="motor_neurons")
 
     
-    motor_neurons.record("spikes")
+    # motor_neurons.record("spikes")
 
     conn_list = create_conn_list(WIDTH, HEIGHT)
 
@@ -278,15 +296,15 @@ def run_spinnaker_sim(end_of_sim, input_q, output_q):
 
     # # Get out the spikes
 
-    in_spikes = capture.get_data("spikes")
-    out_spikes = motor_neurons.get_data("spikes")
+    # in_spikes = capture.get_data("spikes")
+    # out_spikes = motor_neurons.get_data("spikes")
 
-    for h in range(HEIGHT):
-        for w in range(WIDTH):
-            l = len(np.asarray(in_spikes.segments[0].spiketrains[h*WIDTH+w]))
-            print(f"({w},{h})-->{l}")
+    # for h in range(HEIGHT):
+    #     for w in range(WIDTH):
+    #         l = len(np.asarray(in_spikes.segments[0].spiketrains[h*WIDTH+w]))
+    #         print(f"({w},{h})-->{l}")
 
-    w_array = np.array(con_move.get("weight", format="array"))
+    # w_array = np.array(con_move.get("weight", format="array"))
     # pdb.set_trace()
 
 
@@ -359,7 +377,9 @@ def produce_data(l, w, r, vx, vy, duration):
     
     return mat, coor
 
-def set_inputs(end_of_sim, input_q):
+def set_inputs():
+
+    global end_of_sim, input_q, output_q
 
     while True:
 
@@ -378,8 +398,22 @@ def set_inputs(end_of_sim, input_q):
 
 
 
-def get_outputs(end_of_sim, output_q):
+def get_outputs():
 
+    global end_of_sim, input_q, output_q,  visual_q
+    
+    dt = 0.020
+    
+    start = time.time()
+    current_t = time.time()
+    next_check = current_t + dt
+
+    spike_times = []
+    spike_count = [0,0,0,0]
+    nb_spikes_max = 100
+    for i in range(4):  # 4 motor neurons          
+        spike_times.append(collections.deque(maxlen=nb_spikes_max))
+        
     while True:
 
         # Check if the spinnaker simulation has ended
@@ -388,32 +422,143 @@ def get_outputs(end_of_sim, output_q):
             print("No more outputs to be received")
             break
 
-        # while not output_q.empty():
-        #     spike = output_q.get(False)
+        while not output_q.empty():
+            out = output_q.get(False)
+            current_t = time.time()
+            elapsed_t = (current_t - start)*1000
+            spike_times[out].append(elapsed_t)
+        
+        if current_t >= next_check:
+            print(f"Checking @ t={current_t}")
+            next_check = current_t + dt
+            for i in range(4):  # 4 motor neurons
+                train = np.array(spike_times[i])
+                short_train = train[train>(current_t-dt-start)*1000]
+                print(f"For MN[{i}]: {len(train)} >= {len(short_train)} (Train vs Short Train)")
+                spike_count[i] = len(short_train)
+            visual_q.put(spike_count, False)
 
         time.sleep(0.005)
 
+def rt_plot(i, axs, t, mn_r, mn_l, mn_u, mn_d, spike_count):
+
+    global visual_q
+
+    while not visual_q.empty():
+        spike_count = visual_q.get(False)
+        print(spike_count)
+
+    # Add x and y to lists
+    t.append(datetime.datetime.now().strftime('%H:%M:%S.%f'))
+    mn_r.append(spike_count[0])
+    mn_l.append(spike_count[1])
+    mn_u.append(spike_count[2])
+    mn_d.append(spike_count[3])
+
+    # Limit x and y lists to 100 items
+    t = t[-100:]
+    mn_r = mn_r[-100:]
+    mn_l = mn_l[-100:]
+    mn_u = mn_u[-100:]
+    mn_d = mn_d[-100:]
+
+    txt_l = txt_r = txt_u = txt_d = "No signal"
+    if mn_r[-1] != -100:
+        txt_r = "r = {:.3f} [m] ".format(mn_r[-1]) 
+    if mn_l[-1] != -100:
+        txt_l = "l = {:.3f} [m] ".format(mn_l[-1]) 
+    if mn_u[-1] != -100:
+        txt_u = "u = {:.3f} [m] ".format(mn_u[-1]) 
+    if mn_d[-1] != -100:
+        txt_d = "d = {:.3f} [m] ".format(mn_d[-1])
+
+    # Draw x and y lists
+
+    max_y = 100
+
+    axs[0].clear()
+    axs[0].plot(t, mn_r, color='r')
+    axs[0].text(t[0], 0.5*max_y, txt_r, fontsize='xx-large')
+    axs[0].xaxis.set_visible(False)
+    axs[0].set_ylabel('mn_r')
+    axs[0].set_ylim([0,max_y])
+
+    axs[1].clear()
+    axs[1].plot(t, mn_l, color='g')
+    axs[1].text(t[0], 0.5*max_y, txt_l, fontsize='xx-large')
+    axs[1].xaxis.set_visible(False)
+    axs[1].set_ylabel('mn_l')
+    axs[1].set_ylim([0,max_y])
+
+    axs[2].clear()
+    axs[2].plot(t, mn_u, color='r')
+    axs[2].text(t[0], 0.5*max_y, txt_u, fontsize='xx-large')
+    axs[2].xaxis.set_visible(False)
+    axs[2].set_ylabel('mn_u')
+    axs[2].set_ylim([0,max_y])
+
+    axs[3].clear()
+    axs[3].plot(t, mn_d, color='g')
+    axs[3].text(t[0], 0.5*max_y, txt_d, fontsize='xx-large')
+    axs[3].xaxis.set_visible(False)
+    axs[3].set_ylabel('mn_d')
+    axs[3].set_ylim([0,max_y])
+
+
+    axs[0].set_title("Motor Neurons", fontsize='xx-large')
+
+def oscilloscope():
+
+    global visual_q
+
+    print("Starting Oscilloscope")
+
+    # Create figure for plotting
+    fig, axs = plt.subplots(4, figsize=(8.72, 6.18))
+    fig.canvas.manager.set_window_title('World Space')
+
+
+    t = []
+    mn_r = []
+    mn_l = []
+    mn_u = []
+    mn_d = []
+
+    i = 0
+    spike_count = [-100,-100,-100, -100]
+
+    # Set up plot to call rt_xyz() function periodically
+    ani = animation.FuncAnimation(fig, rt_plot, fargs=(axs, t, mn_r, mn_l, mn_u, mn_d, spike_count), interval=1)
+    plt.show()
+
 if __name__ == '__main__':
 
+    global end_of_sim, input_q, output_q,  visual_q
+    
     manager = multiprocessing.Manager()
 
     end_of_sim = manager.Value('i', 0)
-
     input_q = multiprocessing.Queue()
     output_q = multiprocessing.Queue()
+    visual_q = multiprocessing.Queue()
 
 
-    p_i_data = multiprocessing.Process(target=set_inputs, args=(end_of_sim, input_q,))
-    p_o_data = multiprocessing.Process(target=get_outputs, args=(end_of_sim, output_q,))
-    p_spinn = multiprocessing.Process(target=run_spinnaker_sim, args=(end_of_sim, input_q, output_q,))
+
+
+    p_i_data = multiprocessing.Process(target=set_inputs, args=())
+    p_o_data = multiprocessing.Process(target=get_outputs, args=())
+    p_visual = multiprocessing.Process(target=oscilloscope, args=())
+    p_spinn = multiprocessing.Process(target=run_spinnaker_sim, args=())
     
     # run_spinnaker_sim(end_of_sim, input_q, output_q)
 
     p_i_data.start()
     p_o_data.start()
+    p_visual.start()
     p_spinn.start()
 
 
     p_i_data.join()
     p_o_data.join()
     p_spinn.join()
+    p_visual.join()
