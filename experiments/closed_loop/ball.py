@@ -2,7 +2,7 @@ import numpy as np
 import time
 import math
 import os
-import cv2
+# import cv2
 import matplotlib.pyplot as plt
 import sys,tty,termios
 import pdb
@@ -156,8 +156,8 @@ if __name__ == "__main__":
             ball_update = 0      
             bball.update_c()
             print("{:.1f} %".format(np.round(t/(duration*1000),3)*100))
-            cv2.imshow("Pixel Space", mat[:,:,t]*255)
-            cv2.waitKey(1) 
+            # cv2.imshow("Pixel Space", mat[:,:,t]*255)
+            # cv2.waitKey(1) 
 
         ball_update += 1
         LED_update += 1

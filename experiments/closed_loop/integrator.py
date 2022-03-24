@@ -305,17 +305,14 @@ def run_spinnaker_sim():
             print(f"({x},{y}) : {conn[0]}\t-->\t{conn[1]} : w={conn[2]}")
 
 
-    cell_conn = p.FromListConnector(conn_list, safe=True)
-    
+    cell_conn = p.FromListConnector(conn_list, safe=True)   
+    # pdb.set_trace() 
     con_move = p.Projection(capture, motor_neurons, cell_conn, receptor_type='excitatory')
 
+        
     # Spike reception (from SpiNNaker to CPU)
-
     port_generator = get_port(14000)
     port = next(port_generator)
-
-
-        
     live_spikes_receiver = p.external_devices.SpynnakerLiveSpikesConnection(receive_labels=["motor_neurons"], local_port=port)
     _ = p.external_devices.activate_live_output_for(motor_neurons, database_notify_port_num=live_spikes_receiver.local_port)
     live_spikes_receiver.add_receive_callback("motor_neurons", receive_spikes_from_sim)
@@ -336,7 +333,7 @@ def run_spinnaker_sim():
     #         l = len(np.asarray(in_spikes.segments[0].spiketrains[h*WIDTH+w]))
     #         print(f"({w},{h})-->{l}")
 
-    w_array = np.array(con_move.get("weight", format="array"))
+    # w_array = np.array(con_move.get("weight", format="array"))
 
 
     # Let other processes know that spinnaker simulation has come to an ned
