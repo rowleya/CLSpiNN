@@ -1,5 +1,6 @@
 import spynnaker8 as p
 from pyNN.space import Grid2D
+from spinn_front_end_common.utilities.database import DatabaseConnection
 import socket
 import pdb
 import math
@@ -13,7 +14,6 @@ import numpy as np
 from random import randint, random
 from struct import pack
 from time import sleep
-from spinn_front_end_common.utilities.database import DatabaseConnection
 from threading import Thread
 
 import matplotlib
@@ -25,7 +25,7 @@ import matplotlib.animation as animation
 import multiprocessing 
 
 
-global end_of_sim, input_q, output_q, visual_q
+global end_of_sim, input_q, output_q, spike_q
 
 for  i in [8,16,32,64,128,256,512,640]:
     WIDTH = i
@@ -53,7 +53,7 @@ X_SHIFT = 16
 
 if send_fake_spikes:
     WIDTH = 8
-    HEIGHT = WIDTH
+    HEIGHT = round(WIDTH*3/4)
 else:
     WIDTH = 346
     HEIGHT = 260
@@ -73,7 +73,7 @@ SLEEP_TIME = 0.005
 N_PACKETS = 1000
 
 # Run time if send_fake_spikes is False
-RUN_TIME = 5000 #[ms]
+RUN_TIME = 20000 #[ms]
 
 print(f"SPIF : {DEVICE_PARAMETERS[2]}:{DEVICE_PARAMETERS[3]}")
 print(f"Pixel Matrix : {WIDTH}x{HEIGHT} (Real={not send_fake_spikes})")
@@ -108,7 +108,7 @@ def receive_spikes_from_sim(label, time, neuron_ids):
 This function creates a list of weights to be used when connecting pixels to motor neurons
 '''
 def create_conn_list(w, h):
-    w_fovea = 100
+    w_fovea = 0.5
     conn_list = []
     
 
@@ -151,8 +151,7 @@ def create_conn_list(w, h):
 
 
 
-
-def new_send_retina_input(ip_addr, port):
+def send_retina_input(ip_addr, port):
 
     global end_of_sim
 
@@ -203,6 +202,54 @@ def new_send_retina_input(ip_addr, port):
             data += pack("<I", packed)
         sock.sendto(data, (ip_addr, port))
         sleep(0.010) # Every 1ms one packet of n_spikes is created
+
+
+            
+
+            
+def new_send_retina_input(ip_addr, port):
+
+    global end_of_sim, input_q
+
+    """ 
+    This is used to send random input to the Ethernet listening in SPIF
+    """
+    global X_SHIFT, Y_SHIFT, P_SHIFT, SLEEP_TIME, N_PACKETS
+    NO_TIMESTAMP = 0x80000000
+    polarity = 1
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+
+    
+
+    while True:
+
+        # Check if the spinnaker simulation has ended
+        if end_of_sim.value == 1:
+            time.sleep(1)
+            print("No more events to be created")
+            break
+        
+        events = []
+        while not input_q.empty():
+            events = input_q.get(False)
+
+
+        data = b""
+        for e in events:        
+            x = e[0]
+            y = e[1]
+        
+            packed = (
+                NO_TIMESTAMP + (polarity << P_SHIFT) +
+                (y << Y_SHIFT) + (x << X_SHIFT))
+            # print(f"Sending x={x}, y={y}, polarity={polarity}, "
+            #     f"packed={hex(packed)}")
+
+            data += pack("<I", packed)
+        sock.sendto(data, (ip_addr, port))
+
 
 
 
@@ -346,70 +393,113 @@ def run_spinnaker_sim():
 
 
 
-def produce_data(l, w, r, vx, vy, duration):
+ 
+class BouncingBall:
+  def __init__(self, dt, w, l, r, cx, cy, vx, vy):
+    self.dt = dt
+    self.r = r
+    self.w = w
+    self.l = l
+    self.cx = cx
+    self.cy = cy
+    self.vx = vx
+    self.vy = vy
 
-    dt = 1 # ms
-    cx = int(2*l/4)
-    cy = int(2*w/4)
+  def update_c(self):
 
-    data_file_title = "ball_{:d}x{:d}_r{:d}_{:d}s.npy".format(l, w, r, duration)
+    marg = 1
 
-
-    mat = np.zeros((w, l, duration*1000))
-    coor = np.zeros((2,duration*1000))
-
+    next_cx = self.cx+self.vx*self.dt
+    next_cy = self.cy+self.vy*self.dt
+    # print("nxt_center: ({:.3f}, {:.3f})".format(next_cx, next_cy))
+    if self.l-self.r-marg < next_cx:
+        # print("Right edge")
+        next_cx = (self.l-self.r-marg)-(next_cx-(self.l-self.r-marg))
+        self.vx = -self.vx
+    if marg+self.r > next_cx:
+        # print("Left edge")
+        next_cx = marg+self.r-(next_cx-(marg+self.r))
+        self.vx = -self.vx
+    self.cx = next_cx
     
+    if self.w-self.r-marg < next_cy:
+        # print("Bottom edge")
+        next_cy = (self.w-self.r-marg)-(next_cy-(self.w-self.r-marg))
+        self.vy = -self.vy
+        
+    if marg+self.r > next_cy:
+        # print("Top edge")
+        next_cy = marg+self.r-(next_cy-(marg+self.r))
+        self.vy = -self.vy
+    self.cy = next_cy
+
+
+def ring(r):
+    cir = np.zeros((2*r+1, 2*r+1))
+    idx = np.array(range(-r, r+1, 1))
+    for x in idx:
+        for y in idx:
+            d = math.sqrt(x*x+y*y)
+            if d <= r and d > r-2:
+                cir[r+x, r+y] = 1         
+                
+    return cir 
+
+def circle(r):
+    cir = np.zeros((2*r+1, 2*r+1))
+    idx = np.array(range(-r, r+1, 1))
+    for x in idx:
+        for y in idx:
+            d = math.sqrt(x*x+y*y)
+            if d <= r:
+                cir[r+x, r+y] = 1         
+                
+    return cir
+
+def update_pixel_frame(bball, LED_on):
+    
+    mat = np.zeros((bball.w,bball.l))
+
+    events = []
+
+    if LED_on:
+        cir = ring(bball.r)
+        cx = int(bball.cx)
+        cy = int(bball.cy)
+        mat[cy-bball.r:cy+bball.r+1, cx-bball.r:cx+bball.r+1] = cir  
+
+        for y in range(cy-bball.r,cy+bball.r+1,1):
+            for x in range(cx-bball.r,cx+bball.r+1,1):
+                events.append((x, y))
+    
+
+    return mat, events 
+
+def set_inputs():
+
+    global end_of_sim, input_q, object_q
+
+    dt = 1 #ms
+    l = WIDTH
+    w = HEIGHT
+    r = min(8, int(WIDTH*7/637+610/637))
+    print(r)
+    cx = int(l/2)
+    cy = int(w/2)
+    vx = -WIDTH/100
+    vy = HEIGHT/200
+    duration = 60
+
+
     
     bball = BouncingBall(dt, w, l, r, cx, cy, vx, vy)
 
-    fps = 100
-    LED_f = 100
+    fps = 50
+    LED_f = 200
     ball_update = 0
     LED_update = 0
     LED_on = 1
     t = 0
-    LED_blink = True
-    while t < duration*1000:   
-        time.sleep(0.001)
-
-        
-        if LED_update >= 1000/(LED_f*2):
-            LED_update = 0
-            LED_blink = True
-        
-        if LED_blink:       
-            LED_blink = False
-            LED_on = 1
-        else:         
-            LED_on = 0
-        mat[:,:,t] = update_pixel_frame(bball, LED_on)
-
-        if ball_update >= 1000/fps:
-            ball_update = 0      
-            bball.update_c()
-            # print("\r{:.1f} %".format(np.round(t/(duration*1000),3)*100), end="")
-
-            # im_final = cv2.resize(mat[:,:,t]*255,(640,480), interpolation = cv2.INTER_NEAREST)
-            # cv2.imshow("Pixel Space", im_final)
-            # # cv2.imshow("Pixel Space", mat[:,:,t]*255)
-            # cv2.waitKey(1) 
-        
-        coor[0,t] = bball.cx
-        coor[1,t] = bball.cy
-
-        ball_update += 1
-        LED_update += 1
-        t += 1
-    
-    
-    
-    # np.save(data_file_title, mat)
-    
-    return mat, coor
-
-def set_inputs():
-
-    global end_of_sim, input_q, output_q
 
     while True:
 
@@ -419,20 +509,40 @@ def set_inputs():
             print("No more inputs to be sent")
             break
     
-        # input_q.put([0, 9])
-        # input_q.put([1, 0])
-        # input_q.put([2, 0])
-        # input_q.put([3, 0])
+        if LED_update >= 1000/LED_f:
+            LED_update = 0
+            LED_on = 1 - LED_on
 
-        time.sleep(0.005)
+        mat, events = update_pixel_frame(bball, LED_on)
+
+        if ball_update >= 1000/fps:
+            ball_update = 0      
+            bball.update_c()
+
+
+            # im_final = cv2.resize(mat*255,(640,480), interpolation = cv2.INTER_NEAREST)
+            # cv2.imshow("Pixel Space", im_final)
+            # cv2.waitKey(1) 
+        
+
+        coor = [bball.cx, bball.cy]
+        object_q.put(coor)
+        input_q.put(events)
+
+        ball_update += 1
+        LED_update += 1
+        t += 1
+
+
+        time.sleep(0.001)
 
 
 
 def get_outputs():
 
-    global end_of_sim, input_q, output_q,  visual_q
+    global end_of_sim, input_q, output_q,  spike_q
     
-    dt = 0.020
+    dt = 0.100
     
     start = time.time()
     current_t = time.time()
@@ -466,20 +576,28 @@ def get_outputs():
                 short_train = train[train>(current_t-dt-start)*1000]
                 # print(f"For MN[{i}]: {len(train)} >= {len(short_train)} (Train vs Short Train)")
                 spike_count[i] = len(short_train)
-            visual_q.put(spike_count, False)
+            spike_q.put(spike_count, False)
 
         time.sleep(0.005)
 
-def rt_plot(i, axs, t, mn_r, mn_l, mn_u, mn_d, spike_count):
+def rt_plot(i, axs, t, x, y, mn_r, mn_l, mn_u, mn_d, obj_xy, spike_count):
 
-    global visual_q
+    global spike_q, object_q
 
-    while not visual_q.empty():
-        spike_count = visual_q.get(False)
+
+    while not object_q.empty():
+        obj_xy = object_q.get(False)
         # print(spike_count)
+
+    while not spike_q.empty():
+        spike_count = spike_q.get(False)
 
     # Add x and y to lists
     t.append(datetime.datetime.now().strftime('%H:%M:%S.%f'))
+
+    x.append(obj_xy[0])
+    y.append(obj_xy[1])
+
     mn_r.append(spike_count[0])
     mn_l.append(spike_count[1])
     mn_u.append(spike_count[2])
@@ -487,12 +605,18 @@ def rt_plot(i, axs, t, mn_r, mn_l, mn_u, mn_d, spike_count):
 
     # Limit x and y lists to 100 items
     t = t[-100:]
+    x = x[-100:]
+    y = y[-100:]
     mn_r = mn_r[-100:]
     mn_l = mn_l[-100:]
     mn_u = mn_u[-100:]
     mn_d = mn_d[-100:]
 
-    txt_l = txt_r = txt_u = txt_d = "No signal"
+    txt_x = txt_y = txt_l = txt_r = txt_u = txt_d = ""
+    if x[-1] != -100:
+        txt_x = "x = {:.3f} [m] ".format(x[-1]) 
+    if y[-1] != -100:
+        txt_y = "y = {:.3f} [m] ".format(y[-1])
     if mn_r[-1] != -100:
         txt_r = "r = {:.3f} [m] ".format(mn_r[-1]) 
     if mn_l[-1] != -100:
@@ -504,66 +628,80 @@ def rt_plot(i, axs, t, mn_r, mn_l, mn_u, mn_d, spike_count):
 
     # Draw x and y lists
 
-    max_y = 100
+    max_y = int(1.2*max(WIDTH, HEIGHT))
+
 
     axs[0].clear()
-    axs[0].plot(t, mn_r, color='r')
-    axs[0].text(t[0], 0.75*max_y, txt_r, fontsize='xx-large')
+    axs[0].plot(t, x)
+    axs[0].plot(t, y)
+    axs[0].text(t[0], 0.75*max_y, txt_x, fontsize='xx-large')
+    axs[0].text(t[0], 0.15*max_y, txt_y, fontsize='xx-large')
     axs[0].xaxis.set_visible(False)
-    axs[0].set_ylabel('mn_r')
+    axs[0].set_ylabel('Pixels')
     axs[0].set_ylim([0,max_y])
 
+    max_y = 100
+
     axs[1].clear()
-    axs[1].plot(t, mn_l, color='g')
-    axs[1].text(t[0], 0.75*max_y, txt_l, fontsize='xx-large')
+    axs[1].plot(t, mn_r, color='r')
+    axs[1].text(t[0], 0.75*max_y, txt_r, fontsize='xx-large')
     axs[1].xaxis.set_visible(False)
-    axs[1].set_ylabel('mn_l')
+    axs[1].set_ylabel('mn_r')
     axs[1].set_ylim([0,max_y])
 
     axs[2].clear()
-    axs[2].plot(t, mn_u, color='r')
-    axs[2].text(t[0], 0.75*max_y, txt_u, fontsize='xx-large')
+    axs[2].plot(t, mn_l, color='g')
+    axs[2].text(t[0], 0.75*max_y, txt_l, fontsize='xx-large')
     axs[2].xaxis.set_visible(False)
-    axs[2].set_ylabel('mn_u')
+    axs[2].set_ylabel('mn_l')
     axs[2].set_ylim([0,max_y])
 
     axs[3].clear()
-    axs[3].plot(t, mn_d, color='g')
-    axs[3].text(t[0], 0.75*max_y, txt_d, fontsize='xx-large')
+    axs[3].plot(t, mn_u, color='r')
+    axs[3].text(t[0], 0.75*max_y, txt_u, fontsize='xx-large')
     axs[3].xaxis.set_visible(False)
-    axs[3].set_ylabel('mn_d')
+    axs[3].set_ylabel('mn_u')
     axs[3].set_ylim([0,max_y])
+
+    axs[4].clear()
+    axs[4].plot(t, mn_d, color='g')
+    axs[4].text(t[0], 0.75*max_y, txt_d, fontsize='xx-large')
+    axs[4].xaxis.set_visible(False)
+    axs[4].set_ylabel('mn_d')
+    axs[4].set_ylim([0,max_y])
 
 
     axs[0].set_title("Motor Neurons", fontsize='xx-large')
 
 def oscilloscope():
 
-    global visual_q
 
     print("Starting Oscilloscope")
 
     # Create figure for plotting
-    fig, axs = plt.subplots(4, figsize=(6, 8))
+    fig, axs = plt.subplots(5, figsize=(8, 8))
     fig.canvas.manager.set_window_title('World Space')
 
 
     t = []
+    x = []
+    y = []
     mn_r = []
     mn_l = []
     mn_u = []
     mn_d = []
 
     i = 0
-    spike_count = [-100,-100,-100, -100]
+    spike_count = [-100,-100,-100,-100]
+    obj_xy = [-100,-100]
 
     # Set up plot to call rt_xyz() function periodically
-    ani = animation.FuncAnimation(fig, rt_plot, fargs=(axs, t, mn_r, mn_l, mn_u, mn_d, spike_count), interval=1)
+    ani = animation.FuncAnimation(fig, rt_plot, fargs=(axs, t, x, y, mn_r, mn_l, mn_u, mn_d, obj_xy, spike_count), interval=1)
     plt.show()
 
 if __name__ == '__main__':
 
-    global end_of_sim, input_q, output_q,  visual_q
+    global end_of_sim, input_q, output_q, spike_q, object_q
     
     print("\n About to start things ... \n")
 
@@ -574,7 +712,8 @@ if __name__ == '__main__':
     end_of_sim = manager.Value('i', 0)
     input_q = multiprocessing.Queue()
     output_q = multiprocessing.Queue()
-    visual_q = multiprocessing.Queue()
+    spike_q = multiprocessing.Queue()
+    object_q = multiprocessing.Queue()
 
 
 
