@@ -3,7 +3,10 @@ import os
 import time
 import numpy as np
 import math
-# import cv2
+try:
+    import cv2
+except:
+    pass
 
 
 
@@ -103,8 +106,6 @@ def produce_data(l, w, r, vx, vy, duration):
     cx = int(2*l/4)
     cy = int(2*w/4)
 
-    data_file_title = "ball_{:d}x{:d}_r{:d}_{:d}s.npy".format(l, w, r, duration)
-
 
     mat = np.zeros((w, l, duration*1000))
     coor = np.zeros((2,duration*1000))
@@ -140,10 +141,12 @@ def produce_data(l, w, r, vx, vy, duration):
             bball.update_c()
             # print("\r{:.1f} %".format(np.round(t/(duration*1000),3)*100), end="")
 
-            # im_final = cv2.resize(mat[:,:,t]*255,(640,480), interpolation = cv2.INTER_NEAREST)
-            # cv2.imshow("Pixel Space", im_final)
-            # # cv2.imshow("Pixel Space", mat[:,:,t]*255)
-            # cv2.waitKey(1) 
+            try:
+                im_final = cv2.resize(mat[:,:,t]*255,(640,480), interpolation = cv2.INTER_NEAREST)
+                cv2.imshow("Pixel Space", im_final)
+                cv2.waitKey(1) 
+            except:
+                pass
         
         coor[0,t] = bball.cx
         coor[1,t] = bball.cy
@@ -153,8 +156,6 @@ def produce_data(l, w, r, vx, vy, duration):
         t += 1
     
     
-    
-    # np.save(data_file_title, mat)
     
     return mat, coor
 

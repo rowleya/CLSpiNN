@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import time
 import numpy as np
 import math
-# import cv2
 import pdb
 
 
@@ -21,7 +20,7 @@ from stimulator import produce_data
 
 def create_stimuli(duration, l_px):
 
-    w_px = 8+0*int(l_px*3/4)
+    w_px = round(l_px*3/4)
     vx =  l_px/80
     vy = -w_px/160
     r_ball = min(8, int(l_px*7/637+610/637))
@@ -50,7 +49,7 @@ def run_spinnaker_sim(mat, coor, l_px, w_px, duration):
                 }
 
     w = 1.0
-    w_fovea = 50
+    w_fovea = 10
 
 
 
