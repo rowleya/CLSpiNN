@@ -2,37 +2,11 @@ import numpy as np
 import time
 import math
 import os
-# import cv2
+import cv2
 import matplotlib.pyplot as plt
 import sys,tty,termios
 import pdb
 
-class _Getch:
-    def __call__(self):
-            fd = sys.stdin.fileno()
-            old_settings = termios.tcgetattr(fd)
-            try:
-                tty.setraw(sys.stdin.fileno())
-                ch = sys.stdin.read(3)
-            finally:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-            return ch
-
-def get():
-        inkey = _Getch()
-        while(1):
-                k=inkey()
-                if k!='':break
-        if k=='\x1b[A':
-                print("up")
-        elif k=='\x1b[B':
-                print("down")
-        elif k=='\x1b[C':
-                print("right")
-        elif k=='\x1b[D':
-                print("left")
-        else:
-                print("not an arrow key!")
 
 class BouncingBall:
   def __init__(self, dt, w, l, r, cx, cy, vx, vy):
@@ -110,9 +84,9 @@ def update_pixel_frame(bball, LED_on):
 if __name__ == "__main__":
 
     dt = 1 #ms
-    l = 64
+    l = 8
     w = int(l*3/4)
-    r = 5
+    r = 0
     cx = int(l/2)
     cy = int(w/2)
     vx = 0.1
@@ -127,10 +101,8 @@ if __name__ == "__main__":
         print("Try python3 ball.py <duration>")
         quit()
 
-    data_file_title = "ball_{:d}x{:d}_r{:d}_{:d}s.npy".format(l, w, r, duration)
 
 
-    mat = np.zeros((w, l, duration*1000))
 
     
     
@@ -150,14 +122,14 @@ if __name__ == "__main__":
             LED_update = 0
             LED_on = 1 - LED_on
 
-        mat[:,:,t] = update_pixel_frame(bball, LED_on)
+        mat = update_pixel_frame(bball, LED_on)
 
         if ball_update >= 1000/fps:
             ball_update = 0      
             bball.update_c()
             print("{:.1f} %".format(np.round(t/(duration*1000),3)*100))
-            # cv2.imshow("Pixel Space", mat[:,:,t]*255)
-            # cv2.waitKey(1) 
+            cv2.imshow("Pixel Space", mat*255)
+            cv2.waitKey(1) 
 
         ball_update += 1
         LED_update += 1
@@ -165,7 +137,6 @@ if __name__ == "__main__":
     
     
     
-    np.save(data_file_title, mat)
 
     
     

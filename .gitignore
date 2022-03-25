@@ -2,5 +2,7 @@
 application_generated_data_files
 examples
 reports
+experiments/closed_loop/last_sim
 *.pyc
+*.npy
 __pycache__

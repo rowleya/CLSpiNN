@@ -52,11 +52,11 @@ Y_SHIFT = 0
 X_SHIFT = 16
 
 if send_fake_spikes:
-    WIDTH = 8
+    WIDTH = 64
     HEIGHT = round(WIDTH*3/4)
 else:
     WIDTH = 346
-    HEIGHT = 260
+    HEIGHT = round(WIDTH*3/4)
 # Creates 512 neurons per core
 SUB_HEIGHT = max(2,2**math.ceil(math.log(math.ceil(math.log(max(2,int(HEIGHT*WIDTH/256)),2)),2)))
 SUB_WIDTH = 2*SUB_HEIGHT
@@ -73,7 +73,7 @@ SLEEP_TIME = 0.005
 N_PACKETS = 1000
 
 # Run time if send_fake_spikes is False
-RUN_TIME = 20000 #[ms]
+RUN_TIME = 30000 #[ms]
 
 print(f"SPIF : {DEVICE_PARAMETERS[2]}:{DEVICE_PARAMETERS[3]}")
 print(f"Pixel Matrix : {WIDTH}x{HEIGHT} (Real={not send_fake_spikes})")
@@ -352,9 +352,11 @@ def run_spinnaker_sim():
             print(f"({x},{y}) : {conn[0]}\t-->\t{conn[1]} : w={conn[2]}")
 
 
-    cell_conn = p.FromListConnector(conn_list, safe=True)   
-    # pdb.set_trace() 
+    cell_conn = p.FromListConnector(conn_list, safe=True)  
+    # cell_conn = p.AllToAllConnector()
+    
     con_move = p.Projection(capture, motor_neurons, cell_conn, receptor_type='excitatory')
+    # con_move = p.Projection(capture, motor_neurons, cell_conn, receptor_type='excitatory', synapse_type=p.StaticSynapse(weight=1, delay=1))
 
         
     # Spike reception (from SpiNNaker to CPU)
@@ -370,16 +372,12 @@ def run_spinnaker_sim():
     p.run(RUN_TIME)
 
 
-    # # Get out the spikes
-
     # in_spikes = capture.get_data("spikes")
     # out_spikes = motor_neurons.get_data("spikes")
-
     # for h in range(HEIGHT):
-    #     for w in range(WIDTH):
-    #         l = len(np.asarray(in_spikes.segments[0].spiketrains[h*WIDTH+w]))
-    #         print(f"({w},{h})-->{l}")
-
+        # for w in range(WIDTH):
+            # l = len(np.asarray(in_spikes.segments[0].spiketrains[h*WIDTH+w]))
+            # print(f"({w},{h})-->{l}")
     # w_array = np.array(con_move.get("weight", format="array"))
 
 
