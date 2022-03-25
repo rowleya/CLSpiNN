@@ -14,6 +14,7 @@ import numpy as np
 from random import randint, random
 from struct import pack
 from time import sleep
+import sys
 from threading import Thread
 
 import matplotlib
@@ -41,6 +42,20 @@ for  i in [8,16,32,64,128,256,512,640]:
 #                                                           SPIF SETUP                                                          #
 #################################################################################################################################
 
+
+
+if len(sys.argv) != 3:
+    print("python3 closed_loop_no_spif.py <duration> <width>")
+    quit()
+else:
+    try:
+        RUN_TIME = 1000*int(sys.argv[1])
+        USER_WIDTH = int(sys.argv[2])
+    except:
+        print("Something went wrong with the arguments")
+        quit()
+print("\n About to start things ... \n")
+
 # Device parameters are "pipe", "chip_coords", "ip_address", "port"
 DEVICE_PARAMETERS = (0, (0, 0), "172.16.223.98", 3333)
 
@@ -52,7 +67,7 @@ Y_SHIFT = 0
 X_SHIFT = 16
 
 if send_fake_spikes:
-    WIDTH = 64
+    WIDTH = USER_WIDTH
     HEIGHT = round(WIDTH*3/4)
 else:
     WIDTH = 346
@@ -72,12 +87,11 @@ WEIGHT = 100
 SLEEP_TIME = 0.005
 N_PACKETS = 1000
 
-# Run time if send_fake_spikes is False
-RUN_TIME = 30000 #[ms]
 
 print(f"SPIF : {DEVICE_PARAMETERS[2]}:{DEVICE_PARAMETERS[3]}")
 print(f"Pixel Matrix : {WIDTH}x{HEIGHT} (Real={not send_fake_spikes})")
 print(f"Run Time : {RUN_TIME}")
+# time.sleep(10)
 # pdb.set_trace()
 
 #################################################################################################################################
@@ -669,7 +683,8 @@ def rt_plot(i, axs, t, x, y, mn_r, mn_l, mn_u, mn_d, obj_xy, spike_count):
     axs[4].set_ylim([0,max_y])
 
 
-    axs[0].set_title("Motor Neurons", fontsize='xx-large')
+    # axs[0].set_title("Object Trajectory", fontsize='xx-large')
+    # axs[1].set_title("Motor Neurons", fontsize='xx-large')
 
 def oscilloscope():
 
@@ -701,7 +716,6 @@ if __name__ == '__main__':
 
     global end_of_sim, input_q, output_q, spike_q, object_q
     
-    print("\n About to start things ... \n")
 
     time.sleep(3)
 
