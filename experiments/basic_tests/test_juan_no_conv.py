@@ -13,7 +13,7 @@ from threading import Thread
 # Note: IP address and port are used to send in spikes when send_fake_spikes
 #       is True
 
-DEVICE_PARAMETERS = [(0, (0, 0), "172.16.223.98", 3333)]
+DEVICE_PARAMETERS = [(0, (0, 0), "172.16.223.90", 3333)]
 # DEVICE_PARAMETERS = [(0, (0, 0), "172.16.223.2", 10000),
 #                      (0, (32, 16), "172.16.223.122", 10000),
 #                      (0, (16, 8), "172.16.223.130", 10000)]
@@ -160,7 +160,7 @@ for h in range(HEIGHT):
         print(f"({w},{h})-->{l}")
 
 
-pdb.set_trace()
+# pdb.set_trace()
 
 
 
