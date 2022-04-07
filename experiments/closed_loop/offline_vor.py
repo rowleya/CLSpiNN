@@ -11,7 +11,7 @@ import pdb
 
 import sys
 sys.path.insert(1, '../../miscelaneous')
-from spinnorse_tools import fetch_files, plot_in_v_out, plot_spikes, plot_voltages, plot_ma_from_spikes, plot_trajectories
+from vis_tools import plot_spikes, plot_voltages, plot_ma_from_spikes, plot_trajectories
 from stimulator import produce_data
 
 ##############################################################################################################################################

@@ -10,24 +10,9 @@ except:
 
 
 
-def get():
-        inkey = _Getch()
-        while(1):
-                k=inkey()
-                if k!='':break
-        if k=='\x1b[A':
-                print("up")
-        elif k=='\x1b[B':
-                print("down")
-        elif k=='\x1b[C':
-                print("right")
-        elif k=='\x1b[D':
-                print("left")
-        else:
-                print("not an arrow key!")
+
 
 class BouncingBall:
-
   def __init__(self, dt, w, l, r, cx, cy, vx, vy):
     self.dt = dt
     self.r = r
@@ -92,13 +77,21 @@ def circle(r):
 def update_pixel_frame(bball, LED_on):
     
     mat = np.zeros((bball.w,bball.l))
+
+    events = []
+
     if LED_on:
         cir = circle(bball.r)
         cx = int(bball.cx)
         cy = int(bball.cy)
         mat[cy-bball.r:cy+bball.r+1, cx-bball.r:cx+bball.r+1] = cir  
+
+        for y in range(cy-bball.r,cy+bball.r+1,1):
+            for x in range(cx-bball.r,cx+bball.r+1,1):
+                events.append((x, y))
     
-    return mat
+
+    return mat, events 
 
 def produce_data(l, w, r, vx, vy, duration):
 
@@ -134,7 +127,7 @@ def produce_data(l, w, r, vx, vy, duration):
             LED_on = 1
         else:         
             LED_on = 0
-        mat[:,:,t] = update_pixel_frame(bball, LED_on)
+        mat[:,:,t], _ = update_pixel_frame(bball, LED_on)
 
         if ball_update >= 1000/fps:
             ball_update = 0      
