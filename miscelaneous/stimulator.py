@@ -93,7 +93,7 @@ def update_pixel_frame(bball, LED_on):
     
     mat = np.zeros((bball.w,bball.l))
     if LED_on:
-        cir = ring(bball.r)
+        cir = circle(bball.r)
         cx = int(bball.cx)
         cy = int(bball.cy)
         mat[cy-bball.r:cy+bball.r+1, cx-bball.r:cx+bball.r+1] = cir  
@@ -115,7 +115,7 @@ def produce_data(l, w, r, vx, vy, duration):
     bball = BouncingBall(dt, w, l, r, cx, cy, vx, vy)
 
     fps = 100
-    LED_f = 100
+    LED_f = 120
     ball_update = 0
     LED_update = 0
     LED_on = 1

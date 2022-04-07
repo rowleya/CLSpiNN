@@ -263,6 +263,6 @@ def plot_trajectories(coor, title):
     axs.plot(coor[1,:], label="y", color="y")
     axs.plot(np.round(coor[0,:],0), label="x", color="b")
     axs.plot(np.round(coor[1,:],0), label="y", color="y")
-    axs.set_ylim([0, 20])
+    axs.set_ylim([0, int(1.2*max(coor[0,:]))])
     plt.legend() 
     plt.savefig("last_sim/" + title + ".png")
