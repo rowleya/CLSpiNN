@@ -515,8 +515,6 @@ def rt_plot(i, fig, axs, t, x, y, mn_r, mn_l, mn_u, mn_d, obj_xy, spike_count):
             plt.savefig('EndOfSim.png')
             plt.close(fig)
 
-    # axs[0].set_title("Object Trajectory", fontsize='xx-large')
-    # axs[1].set_title("Motor Neurons", fontsize='xx-large')
 
 def oscilloscope():
 
@@ -549,8 +547,6 @@ if __name__ == '__main__':
     global end_of_sim, input_q, output_q, spike_q, object_q
     
 
-    time.sleep(3)
-
     manager = multiprocessing.Manager()
 
     end_of_sim = manager.Value('i', 0)
@@ -562,22 +558,14 @@ if __name__ == '__main__':
 
 
 
-    # p_i_data = multiprocessing.Process(target=set_inputs, args=())
     p_o_data = multiprocessing.Process(target=get_outputs, args=())
     p_visual = multiprocessing.Process(target=oscilloscope, args=())
-    # p_spinn = multiprocessing.Process(target=run_spinnaker_sim, args=())
     
 
-    # p_i_data.start()
     p_o_data.start()
     p_visual.start()
-    # p_spinn.start()
 
     run_spinnaker_sim()
 
-    # p_i_data.join()
     p_o_data.join()
     p_visual.join()
-    # p_spinn.join()
-
-    quit()
