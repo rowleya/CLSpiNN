@@ -6,7 +6,7 @@ import pdb
 import math
 import collections
 
-# import cv2
+import cv2
 
 import datetime
 import time
@@ -117,7 +117,7 @@ def receive_spikes_from_sim(label, time, neuron_ids):
 This function creates a list of weights to be used when connecting pixels to motor neurons
 '''
 def create_conn_list(w, h):
-    w_fovea = 0.5
+    w_fovea = 2
     conn_list = []
     
 
@@ -302,6 +302,7 @@ def run_spinnaker_sim():
 
     # Run the simulation for long enough for packets to be sent
     p.run(RUN_TIME)
+    # p.external_devices.run_forever(sync_time=0)
 
     # Let other processes know that spinnaker simulation has come to an ned
     end_of_sim.value = 1
@@ -320,12 +321,12 @@ def set_inputs():
     dt = 1 #ms
     l = WIDTH
     w = HEIGHT
-    r = min(8, int(WIDTH*7/637+610/637))
+    r = 0*min(8, int(WIDTH*7/637+610/637))
     print(r)
-    cx = int(l/2)
-    cy = int(w/2)
+    cx = int(l*1/4)
+    cy = int(w*2/4)
     vx = -WIDTH/100
-    vy = HEIGHT/200
+    vy = HEIGHT/400
     duration = 60
 
 
@@ -345,6 +346,10 @@ def set_inputs():
         if end_of_sim.value == 1:
             time.sleep(1)
             print("No more inputs to be sent")
+            try:
+                cv2.destroyAllWindows()
+            except:
+                pass
             break
     
         if LED_update >= 1000/LED_f:
@@ -359,8 +364,8 @@ def set_inputs():
 
 
             # im_final = cv2.resize(mat*255,(640,480), interpolation = cv2.INTER_NEAREST)
-            # cv2.imshow("Pixel Space", im_final)
-            # cv2.waitKey(1) 
+            cv2.imshow("Pixel Space", mat*255)
+            cv2.waitKey(1) 
         
 
         coor = [bball.cx, bball.cy]
@@ -372,7 +377,7 @@ def set_inputs():
         t += 1
 
 
-        time.sleep(0.001)
+        time.sleep(0.0001)
 
 
 
