@@ -23,12 +23,16 @@ class BouncingBall:
     self.vx = vx
     self.vy = vy
 
-  def update_c(self):
+  def update_c(self, autom, dx=0, dy=0):
 
     marg = 1
 
-    next_cx = self.cx+self.vx*self.dt
-    next_cy = self.cy+self.vy*self.dt
+    if autom == True:
+        next_cx = self.cx+self.vx*self.dt
+        next_cy = self.cy+self.vy*self.dt
+    else:
+        next_cx = self.cx + dx
+        next_cy = self.cy + dy
     # print("nxt_center: ({:.3f}, {:.3f})".format(next_cx, next_cy))
     if self.l-self.r-marg < next_cx:
         # print("Right edge")
@@ -131,7 +135,7 @@ def produce_data(l, w, r, vx, vy, duration):
 
         if ball_update >= 1000/fps:
             ball_update = 0      
-            bball.update_c()
+            bball.update_c(True)
             # print("\r{:.1f} %".format(np.round(t/(duration*1000),3)*100), end="")
 
             try:

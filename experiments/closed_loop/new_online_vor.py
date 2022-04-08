@@ -301,8 +301,8 @@ def run_spinnaker_sim():
 
 
     # Run the simulation for long enough for packets to be sent
-    p.run(RUN_TIME)
-    # p.external_devices.run_forever(sync_time=0)
+    # p.run(RUN_TIME)
+    p.external_devices.run_forever(sync_time=0)
 
     # Let other processes know that spinnaker simulation has come to an ned
     end_of_sim.value = 1
@@ -316,7 +316,7 @@ def run_spinnaker_sim():
 
 def set_inputs():
 
-    global end_of_sim, input_q, object_q
+    global end_of_sim, input_q, object_q, control_q
 
     dt = 1 #ms
     l = WIDTH
@@ -360,12 +360,24 @@ def set_inputs():
 
         if ball_update >= 1000/fps:
             ball_update = 0      
-            bball.update_c(True)
+            dx = 0
+            dy = 0
+            while not control_q.empty():
+                command = control_q.get(False)
+                if command == 'up':
+                    dy = 1   
+                if command == 'down':
+                    dy = -1   
+                if command == 'left':
+                    dx = -1
+                if command == 'right':
+                    dx = 1
+            bball.update_c(False, dx, dy)
 
 
             # im_final = cv2.resize(mat*255,(640,480), interpolation = cv2.INTER_NEAREST)
-            cv2.imshow("Pixel Space", mat*255)
-            cv2.waitKey(1) 
+            # cv2.imshow("Pixel Space", mat*255)
+            # cv2.waitKey(1) 
         
 
         coor = [bball.cx, bball.cy]
@@ -549,28 +561,65 @@ def oscilloscope():
 
 if __name__ == '__main__':
 
-    global end_of_sim, input_q, output_q, spike_q, object_q
+    global end_of_sim, input_q, output_q, spike_q, object_q, control_q
     
 
     manager = multiprocessing.Manager()
 
     end_of_sim = manager.Value('i', 0)
-    input_q = multiprocessing.Queue()
-    output_q = multiprocessing.Queue()
-    spike_q = multiprocessing.Queue()
-    object_q = multiprocessing.Queue()
+    input_q = multiprocessing.Queue() # events
+    control_q = multiprocessing.Queue() # commands
+    output_q = multiprocessing.Queue() # events
+    spike_q = multiprocessing.Queue() # signals
+    object_q = multiprocessing.Queue() # visualization
 
 
 
 
     p_o_data = multiprocessing.Process(target=get_outputs, args=())
     p_visual = multiprocessing.Process(target=oscilloscope, args=())
+    p_spiNN = multiprocessing.Process(target=run_spinnaker_sim, args=())
     
 
     p_o_data.start()
     p_visual.start()
+    p_spiNN.start()
 
-    run_spinnaker_sim()
+    # run_spinnaker_sim()
 
+    import pygame
+    from pygame.locals import *
+    import sys
+
+
+    pygame.init()
+    display = pygame.display.set_mode((300, 300))
+    
+    while True:
+
+        if end_of_sim.value == 1:
+            time.sleep(1)
+            print("No more commands to be executed.")
+            break
+
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_w:
+                    print(u"\u2191")
+                    control_q.put('up')
+                if event.key == pygame.K_s:
+                    print(u"\u2193")
+                    control_q.put('down')
+                if event.key == pygame.K_a:
+                    print(u"\u2190")
+                    control_q.put('left')
+                if event.key == pygame.K_d:
+                    print(u"\u2192")
+                    control_q.put('right')
+
+    p_spiNN.join()
     p_o_data.join()
     p_visual.join()
