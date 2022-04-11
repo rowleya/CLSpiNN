@@ -301,8 +301,8 @@ def run_spinnaker_sim():
 
 
     # Run the simulation for long enough for packets to be sent
-    # p.run(RUN_TIME)
-    p.external_devices.run_forever(sync_time=0)
+    p.run(RUN_TIME)
+    # p.external_devices.run_forever(sync_time=0)
 
     # Let other processes know that spinnaker simulation has come to an ned
     end_of_sim.value = 1
@@ -316,12 +316,12 @@ def run_spinnaker_sim():
 
 def set_inputs():
 
-    global end_of_sim, input_q, object_q, control_q
+    global end_of_sim, input_q, obj_coor_q, control_q, shared_pix_mat
 
     dt = 1 #ms
     l = WIDTH
     w = HEIGHT
-    r = 0*min(8, int(WIDTH*7/637+610/637))
+    r = min(8, int(WIDTH*7/637+610/637))
     print(r)
     cx = int(l*1/4)
     cy = int(w*2/4)
@@ -365,9 +365,9 @@ def set_inputs():
             while not control_q.empty():
                 command = control_q.get(False)
                 if command == 'up':
-                    dy = 1   
-                if command == 'down':
                     dy = -1   
+                if command == 'down':
+                    dy = 1   
                 if command == 'left':
                     dx = -1
                 if command == 'right':
@@ -379,9 +379,12 @@ def set_inputs():
             # cv2.imshow("Pixel Space", mat*255)
             # cv2.waitKey(1) 
         
+        pix_mat_mp, pix_mat_np = shared_pix_mat
+        # pix_mat_mp.acquire()
+        pix_mat_np[:,:] = np.transpose(mat)
 
         coor = [bball.cx, bball.cy]
-        object_q.put(coor)
+        obj_coor_q.put(coor)
         input_q.put(events)
 
         ball_update += 1
@@ -437,11 +440,11 @@ def get_outputs():
 
 def rt_plot(i, fig, axs, t, x, y, mn_r, mn_l, mn_u, mn_d, obj_xy, spike_count):
 
-    global spike_q, object_q, end_of_sim
+    global spike_q, obj_coor_q, end_of_sim
 
 
-    while not object_q.empty():
-        obj_xy = object_q.get(False)
+    while not obj_coor_q.empty():
+        obj_xy = obj_coor_q.get(False)
         # print(spike_count)
 
     while not spike_q.empty():
@@ -559,19 +562,80 @@ def oscilloscope():
     ani = animation.FuncAnimation(fig, rt_plot, fargs=(fig, axs, t, x, y, mn_r, mn_l, mn_u, mn_d, obj_xy, spike_count), interval=1)
     plt.show()
 
+
+class Viewer:
+    def __init__(self, update_func, control_q, display_size):
+        self.display_size = display_size
+        self.update_func = update_func
+        self.control_q = control_q
+        pygame.init()
+        self.display = pygame.display.set_mode(display_size)
+    
+    def set_title(self, title):
+        pygame.display.set_caption(title)
+    
+    def start(self):
+        running = True
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_w:
+                        print(u"\u2191")
+                        control_q.put('up')
+                    if event.key == pygame.K_s:
+                        print(u"\u2193")
+                        control_q.put('down')
+                    if event.key == pygame.K_a:
+                        print(u"\u2190")
+                        control_q.put('left')
+                    if event.key == pygame.K_d:
+                        print(u"\u2192")
+                        control_q.put('right')
+
+            Z = self.update_func()
+            surf = pygame.surfarray.make_surface(Z)
+            surf = pygame.transform.scale(surf, self.display_size)
+
+            self.display.blit(surf, (0, 0))
+
+            pygame.display.update()
+            time.sleep(1/25)
+
+        pygame.quit()
+
+def update():
+
+    global shared_pix_mat
+
+    pix_mat_mp, pix_mat_np = shared_pix_mat
+    
+    image = np.zeros((pix_mat_np.shape[0],pix_mat_np.shape[1],3))
+    # image[:,:,0] = pix_mat_np*255
+    image[:,:,1] = pix_mat_np*255
+    # image[:,:,2] = pix_mat_np*255
+
+    return image.astype('uint8')
+
 if __name__ == '__main__':
 
-    global end_of_sim, input_q, output_q, spike_q, object_q, control_q
+    global end_of_sim, input_q, output_q, spike_q, obj_coor_q, control_q, shared_pix_mat
     
 
     manager = multiprocessing.Manager()
 
     end_of_sim = manager.Value('i', 0)
+    pix_mat_mp = multiprocessing.Array('I', int(np.prod((WIDTH, HEIGHT))), lock=multiprocessing.Lock())
+    pix_mat_np = np.frombuffer(pix_mat_mp.get_obj(), dtype='I').reshape((WIDTH, HEIGHT))
+
+    shared_pix_mat = (pix_mat_mp, pix_mat_np)
+
     input_q = multiprocessing.Queue() # events
     control_q = multiprocessing.Queue() # commands
     output_q = multiprocessing.Queue() # events
     spike_q = multiprocessing.Queue() # signals
-    object_q = multiprocessing.Queue() # visualization
+    obj_coor_q = multiprocessing.Queue() # visualization
 
 
 
@@ -592,33 +656,16 @@ if __name__ == '__main__':
     import sys
 
 
-    pygame.init()
-    display = pygame.display.set_mode((300, 300))
+    viewer = Viewer(update, control_q, (346, 260))
+    viewer.start()
     
-    while True:
+    # while True:
 
-        if end_of_sim.value == 1:
-            time.sleep(1)
-            print("No more commands to be executed.")
-            break
+    #     if end_of_sim.value == 1:
+    #         time.sleep(1)
+    #         print("No more commands to be executed.")
+    #         break
 
-        for event in pygame.event.get():
-            if event.type == QUIT:
-                pygame.quit()
-                sys.exit()
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_w:
-                    print(u"\u2191")
-                    control_q.put('up')
-                if event.key == pygame.K_s:
-                    print(u"\u2193")
-                    control_q.put('down')
-                if event.key == pygame.K_a:
-                    print(u"\u2190")
-                    control_q.put('left')
-                if event.key == pygame.K_d:
-                    print(u"\u2192")
-                    control_q.put('right')
 
     p_spiNN.join()
     p_o_data.join()

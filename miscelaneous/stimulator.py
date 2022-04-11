@@ -36,22 +36,24 @@ class BouncingBall:
     # print("nxt_center: ({:.3f}, {:.3f})".format(next_cx, next_cy))
     if self.l-self.r-marg < next_cx:
         # print("Right edge")
-        next_cx = (self.l-self.r-marg)-(next_cx-(self.l-self.r-marg))
+        next_cx = self.l-self.r-marg # (self.l-self.r-marg)-(next_cx-(self.l-self.r-marg))
         self.vx = -self.vx
-    if marg+self.r > next_cx:
+    if marg+self.r-1 > next_cx:
         # print("Left edge")
-        next_cx = marg+self.r-(next_cx-(marg+self.r))
+        print(f"next cx: {next_cx} vs limit: {marg+self.r-1}")
+        next_cx = marg+self.r-1 # marg+self.r-(next_cx-(marg+self.r))
         self.vx = -self.vx
     self.cx = next_cx
     
     if self.w-self.r-marg < next_cy:
         # print("Bottom edge")
-        next_cy = (self.w-self.r-marg)-(next_cy-(self.w-self.r-marg))
+        next_cy = self.w-self.r-marg #(self.w-self.r-marg)-(next_cy-(self.w-self.r-marg))
         self.vy = -self.vy
         
-    if marg+self.r > next_cy:
+    if marg+self.r-1 > next_cy:
         # print("Top edge")
-        next_cy = marg+self.r-(next_cy-(marg+self.r))
+        print(f"next cy: {next_cy} vs limit: {marg+self.r-1}")
+        next_cy = marg+self.r-1 # marg+self.r-(next_cy-(marg+self.r))
         self.vy = -self.vy
     self.cy = next_cy
 
