@@ -38,14 +38,14 @@ global end_of_sim, input_q, output_q, spike_q
 
 script_name = os.path.basename(__file__)
 
-if len(sys.argv) != 4:
-    print(f"python3 {script_name} <duration> <width> <height>")
+if len(sys.argv) != 3:
+    print(f"python3 {script_name} <duration> <width>")
     quit()
 else:
     try:
         RUN_TIME = 1000*int(sys.argv[1])
         USER_WIDTH = int(sys.argv[2])
-        USER_HEIGTH = int(sys.argv[3])
+        USER_HEIGTH = int(USER_WIDTH*3/4)
     except:
         print("Something went wrong with the arguments")
         quit()
@@ -74,7 +74,7 @@ SUB_WIDTH = 2*SUB_HEIGHT
 print(f"Creating {SUB_WIDTH}*{SUB_HEIGHT}={SUB_WIDTH*SUB_HEIGHT} neurons per core")
 
 # Weight of connections between "layers"
-WEIGHT = 100
+WEIGHT = 10
 
 
 
@@ -601,7 +601,7 @@ class Viewer:
             self.display.blit(surf, (0, 0))
 
             pygame.display.update()
-            time.sleep(1/25)
+            # time.sleep(1/25)
 
         pygame.quit()
 

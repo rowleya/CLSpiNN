@@ -40,7 +40,7 @@ class BouncingBall:
         self.vx = -self.vx
     if marg+self.r-1 > next_cx:
         # print("Left edge")
-        print(f"next cx: {next_cx} vs limit: {marg+self.r-1}")
+        # print(f"next cx: {next_cx} vs limit: {marg+self.r-1}")
         next_cx = marg+self.r-1 # marg+self.r-(next_cx-(marg+self.r))
         self.vx = -self.vx
     self.cx = next_cx
@@ -52,7 +52,7 @@ class BouncingBall:
         
     if marg+self.r-1 > next_cy:
         # print("Top edge")
-        print(f"next cy: {next_cy} vs limit: {marg+self.r-1}")
+        # print(f"next cy: {next_cy} vs limit: {marg+self.r-1}")
         next_cy = marg+self.r-1 # marg+self.r-(next_cy-(marg+self.r))
         self.vy = -self.vy
     self.cy = next_cy
