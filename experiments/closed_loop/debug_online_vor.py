@@ -113,101 +113,7 @@ def receive_spikes_from_sim(label, time, neuron_ids):
         # print(f"Spike --> MN[{n_id}]")
         output_q.put(n_id, False)
 
-''' 
-This function creates a list of weights to be used when connecting pixels to motor neurons
-'''
 def create_conn_list(w, h, n=0):
-    w_fovea = 1
-    conn_list = []
-    
-
-    delay = 1 # 1 [ms]
-    for y in range(h):
-        for x in range(w):
-            pre_idx = y*w+x
-
-            for post_idx in range(4):
-
-                weight = 0.000001
-                x_weight = 2*w_fovea*(abs((x+0.5)-w/2)/(w-1))
-                y_weight = 2*w_fovea*(abs((y+0.5)-h/2)/(h-1))
-
-                # Move right (when stimulus on the left 'hemisphere')    
-                if post_idx == 0:
-                    if (x+0.5) < w/2:
-                        weight = x_weight
-                            
-                # Move Left (when stimulus on the right 'hemisphere')
-                if post_idx == 1:
-                    if (x+0.5) > w/2:
-                        weight = x_weight
-                                    
-                # Move up (when stimulus on the bottom 'hemisphere')    
-                if post_idx == 2: 
-                    if (y+0.5) > h/2: # higher pixel --> bottom of image
-                        weight = y_weight
-                
-                # Move down (when stimulus on the top 'hemisphere') 
-                if post_idx == 3:
-                    if (y+0.5) < h/2: # lower pixel --> top of image
-                        weight = y_weight
-                
-                conn_list.append((pre_idx, post_idx, weight, delay))
-        
-    return conn_list
-
-'''
-n: number o neurons per core
-'''
-def create_smart_conn_list(w, h, n):
-    w_fovea = 2
-    conn_list = []
-    
-
-    delay = 1 # 1 [ms]
-    for core in range(int(math.ceil(w*h/n))):
-        for cell in range(n):
-            pre_idx = core*n+cell
-            # x = int(math.floor(pre_idx%w))
-            # y = int(math.floor(pre_idx/w))
-            x = int(math.floor(pre_idx/h))
-            y = int(math.floor(pre_idx%h))
-            print(f"{pre_idx}-->({x},{y})")
-
-            for post_idx in range(4):
-
-                weight = 0.000001
-                x_weight = 2*w_fovea*(abs((x+0.5)-w/2)/(w-1))
-                y_weight = 2*w_fovea*(abs((y+0.5)-h/2)/(h-1))
-
-                # Move right (when stimulus on the left 'hemisphere')    
-                if post_idx == 0:
-                    if (x+0.5) < w/2:
-                        weight = x_weight
-                            
-                # Move Left (when stimulus on the right 'hemisphere')
-                if post_idx == 1:
-                    if (x+0.5) > w/2:
-                        weight = x_weight
-                                    
-                # Move up (when stimulus on the bottom 'hemisphere')    
-                if post_idx == 2: 
-                    if (y+0.5) > h/2: # higher pixel --> bottom of image
-                        weight = y_weight
-                
-                # Move down (when stimulus on the top 'hemisphere') 
-                if post_idx == 3:
-                    if (y+0.5) < h/2: # lower pixel --> top of image
-                        weight = y_weight
-                
-                conn_list.append((pre_idx, post_idx, weight, delay))
-        
-    return conn_list
-
-'''
-n: number o neurons per core
-'''
-def create_dummy_conn_list(w, h, n=0):
     w_fovea = 2
     conn_list = []
     
@@ -385,7 +291,7 @@ def run_spinnaker_sim():
     motor_neurons = p.Population(4, celltype(**cell_params), label="motor_neurons")
 
 
-    conn_list = create_dummy_conn_list(WIDTH, HEIGHT, SUB_HEIGHT*SUB_WIDTH)
+    conn_list = create_conn_list(WIDTH, HEIGHT, SUB_HEIGHT*SUB_WIDTH)
     
 
 
@@ -422,7 +328,7 @@ def set_inputs():
     dt = 1 #ms
     l = WIDTH
     w = HEIGHT
-    r = 4+0*min(8, int(WIDTH*7/637+610/637))
+    r = 3+0*min(8, int(WIDTH*7/637+610/637))
     cx = r
     cy = r
     vx = -WIDTH/600
@@ -595,28 +501,28 @@ def rt_plot(i, fig, axs, t, x, y, mn_r, mn_l, mn_u, mn_d, obj_xy, spike_count):
 
     axs[1].clear()
     axs[1].plot(t, mn_r, color='r')
-    axs[1].text(t[0], 0.75*max_y, txt_r, fontsize='xx-large')
+    # axs[1].text(t[0], 0.75*max_y, txt_r, fontsize='xx-large')
     axs[1].xaxis.set_visible(False)
     axs[1].set_ylabel('mn_r')
     axs[1].set_ylim(bottom = 0)
 
     axs[2].clear()
     axs[2].plot(t, mn_l, color='g')
-    axs[2].text(t[0], 0.75*max_y, txt_l, fontsize='xx-large')
+    # axs[2].text(t[0], 0.75*max_y, txt_l, fontsize='xx-large')
     axs[2].xaxis.set_visible(False)
     axs[2].set_ylabel('mn_l')
     axs[2].set_ylim(bottom = 0)
 
     axs[3].clear()
     axs[3].plot(t, mn_u, color='r')
-    axs[3].text(t[0], 0.75*max_y, txt_u, fontsize='xx-large')
+    # axs[3].text(t[0], 0.75*max_y, txt_u, fontsize='xx-large')
     axs[3].xaxis.set_visible(False)
     axs[3].set_ylabel('mn_u')
     axs[3].set_ylim(bottom = 0)
 
     axs[4].clear()
     axs[4].plot(t, mn_d, color='g')
-    axs[4].text(t[0], 0.75*max_y, txt_d, fontsize='xx-large')
+    # axs[4].text(t[0], 0.75*max_y, txt_d, fontsize='xx-large')
     axs[4].xaxis.set_visible(False)
     axs[4].set_ylabel('mn_d')
     axs[4].set_ylim(bottom = 0)
