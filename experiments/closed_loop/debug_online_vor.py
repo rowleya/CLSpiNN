@@ -74,7 +74,7 @@ time.sleep(3)
 # input("Press Enter")
 
 # Weight of connections between "layers"
-WEIGHT = 0.5
+WEIGHT = 0.1
 
 
 
@@ -117,7 +117,7 @@ def receive_spikes_from_sim(label, time, neuron_ids):
 This function creates a list of weights to be used when connecting pixels to motor neurons
 '''
 def create_conn_list(w, h, n=0):
-    w_fovea = 0.5
+    w_fovea = 1
     conn_list = []
     
 
@@ -422,7 +422,7 @@ def set_inputs():
     dt = 1 #ms
     l = WIDTH
     w = HEIGHT
-    r = min(8, int(WIDTH*7/637+610/637))
+    r = 4+0*min(8, int(WIDTH*7/637+610/637))
     cx = r
     cy = r
     vx = -WIDTH/600
@@ -598,28 +598,28 @@ def rt_plot(i, fig, axs, t, x, y, mn_r, mn_l, mn_u, mn_d, obj_xy, spike_count):
     axs[1].text(t[0], 0.75*max_y, txt_r, fontsize='xx-large')
     axs[1].xaxis.set_visible(False)
     axs[1].set_ylabel('mn_r')
-    axs[1].set_ylim([0,max_y])
+    axs[1].set_ylim(bottom = 0)
 
     axs[2].clear()
     axs[2].plot(t, mn_l, color='g')
     axs[2].text(t[0], 0.75*max_y, txt_l, fontsize='xx-large')
     axs[2].xaxis.set_visible(False)
     axs[2].set_ylabel('mn_l')
-    axs[2].set_ylim([0,max_y])
+    axs[2].set_ylim(bottom = 0)
 
     axs[3].clear()
     axs[3].plot(t, mn_u, color='r')
     axs[3].text(t[0], 0.75*max_y, txt_u, fontsize='xx-large')
     axs[3].xaxis.set_visible(False)
     axs[3].set_ylabel('mn_u')
-    axs[3].set_ylim([0,max_y])
+    axs[3].set_ylim(bottom = 0)
 
     axs[4].clear()
     axs[4].plot(t, mn_d, color='g')
     axs[4].text(t[0], 0.75*max_y, txt_d, fontsize='xx-large')
     axs[4].xaxis.set_visible(False)
     axs[4].set_ylabel('mn_d')
-    axs[4].set_ylim([0,max_y])
+    axs[4].set_ylim(bottom = 0)
 
 
     if end_of_sim.value == 1:
