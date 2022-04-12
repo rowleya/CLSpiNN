@@ -6,8 +6,6 @@ import pdb
 import math
 import collections
 
-import cv2
-
 import datetime
 import time
 import numpy as np
@@ -72,9 +70,11 @@ SUB_HEIGHT = max(2,2**math.ceil(math.log(math.ceil(math.log(max(2,int(HEIGHT*WID
 SUB_WIDTH = 2*SUB_HEIGHT
 
 print(f"Creating {SUB_WIDTH}*{SUB_HEIGHT}={SUB_WIDTH*SUB_HEIGHT} neurons per core")
+time.sleep(3)
+# input("Press Enter")
 
 # Weight of connections between "layers"
-WEIGHT = 10
+WEIGHT = 0.5
 
 
 
@@ -116,8 +116,8 @@ def receive_spikes_from_sim(label, time, neuron_ids):
 ''' 
 This function creates a list of weights to be used when connecting pixels to motor neurons
 '''
-def create_conn_list(w, h):
-    w_fovea = 2
+def create_conn_list(w, h, n=0):
+    w_fovea = 0.5
     conn_list = []
     
 
@@ -156,6 +156,106 @@ def create_conn_list(w, h):
         
     return conn_list
 
+'''
+n: number o neurons per core
+'''
+def create_smart_conn_list(w, h, n):
+    w_fovea = 2
+    conn_list = []
+    
+
+    delay = 1 # 1 [ms]
+    for core in range(int(math.ceil(w*h/n))):
+        for cell in range(n):
+            pre_idx = core*n+cell
+            # x = int(math.floor(pre_idx%w))
+            # y = int(math.floor(pre_idx/w))
+            x = int(math.floor(pre_idx/h))
+            y = int(math.floor(pre_idx%h))
+            print(f"{pre_idx}-->({x},{y})")
+
+            for post_idx in range(4):
+
+                weight = 0.000001
+                x_weight = 2*w_fovea*(abs((x+0.5)-w/2)/(w-1))
+                y_weight = 2*w_fovea*(abs((y+0.5)-h/2)/(h-1))
+
+                # Move right (when stimulus on the left 'hemisphere')    
+                if post_idx == 0:
+                    if (x+0.5) < w/2:
+                        weight = x_weight
+                            
+                # Move Left (when stimulus on the right 'hemisphere')
+                if post_idx == 1:
+                    if (x+0.5) > w/2:
+                        weight = x_weight
+                                    
+                # Move up (when stimulus on the bottom 'hemisphere')    
+                if post_idx == 2: 
+                    if (y+0.5) > h/2: # higher pixel --> bottom of image
+                        weight = y_weight
+                
+                # Move down (when stimulus on the top 'hemisphere') 
+                if post_idx == 3:
+                    if (y+0.5) < h/2: # lower pixel --> top of image
+                        weight = y_weight
+                
+                conn_list.append((pre_idx, post_idx, weight, delay))
+        
+    return conn_list
+
+'''
+n: number o neurons per core
+'''
+def create_dummy_conn_list(w, h, n=0):
+    w_fovea = 2
+    conn_list = []
+    
+
+    delay = 1 # 1 [ms]
+    nb_col = math.ceil(w/n)
+    nb_row = math.ceil(h/n)
+
+    pre_idx = -1
+    for h_block in range(nb_row):
+        for v_block in range(nb_col):
+            for row in range(n):
+                for col in range(n):
+                    x = v_block*n+col
+                    y = h_block*n+row
+                    if x<w and y<h:
+                        print(f"{pre_idx} -> ({x},{y})")
+                        pre_idx += 1
+
+                        for post_idx in range(4):
+
+                            weight = 0.000001
+                            x_weight = 2*w_fovea*(abs((x+0.5)-w/2)/(w-1))
+                            y_weight = 2*w_fovea*(abs((y+0.5)-h/2)/(h-1))
+
+                            # Move right (when stimulus on the left 'hemisphere')    
+                            if post_idx == 0:
+                                if (x+0.5) < w/2:
+                                    weight = x_weight
+                                        
+                            # Move Left (when stimulus on the right 'hemisphere')
+                            if post_idx == 1:
+                                if (x+0.5) > w/2:
+                                    weight = x_weight
+                                                
+                            # Move up (when stimulus on the bottom 'hemisphere')    
+                            if post_idx == 2: 
+                                if (y+0.5) > h/2: # higher pixel --> bottom of image
+                                    weight = y_weight
+                            
+                            # Move down (when stimulus on the top 'hemisphere') 
+                            if post_idx == 3:
+                                if (y+0.5) < h/2: # lower pixel --> top of image
+                                    weight = y_weight
+                            
+                            conn_list.append((pre_idx, post_idx, weight, delay))
+        
+    return conn_list
 
 '''
 This function launches the input generator and packs generated events to send them to SpiNNaker
@@ -285,7 +385,8 @@ def run_spinnaker_sim():
     motor_neurons = p.Population(4, celltype(**cell_params), label="motor_neurons")
 
 
-    conn_list = create_conn_list(WIDTH, HEIGHT)
+    conn_list = create_dummy_conn_list(WIDTH, HEIGHT, SUB_HEIGHT*SUB_WIDTH)
+    
 
 
     cell_conn = p.FromListConnector(conn_list, safe=True)  
@@ -322,11 +423,10 @@ def set_inputs():
     l = WIDTH
     w = HEIGHT
     r = min(8, int(WIDTH*7/637+610/637))
-    print(r)
-    cx = int(l*1/4)
-    cy = int(w*2/4)
-    vx = -WIDTH/100
-    vy = HEIGHT/400
+    cx = r
+    cy = r
+    vx = -WIDTH/600
+    vy = HEIGHT/1200
     duration = 60
 
 
@@ -346,10 +446,6 @@ def set_inputs():
         if end_of_sim.value == 1:
             time.sleep(1)
             print("No more inputs to be sent")
-            try:
-                cv2.destroyAllWindows()
-            except:
-                pass
             break
     
         if LED_update >= 1000/LED_f:
@@ -375,12 +471,9 @@ def set_inputs():
                     dx = -1
                 if command == 'right':
                     dx = 1
-            bball.update_c(False, dx, dy)
+            bball.update_c(True, dx, dy)
 
 
-            # im_final = cv2.resize(mat*255,(640,480), interpolation = cv2.INTER_NEAREST)
-            # cv2.imshow("Pixel Space", mat*255)
-            # cv2.waitKey(1) 
         
 
         coor = [bball.cx, bball.cy]

@@ -57,6 +57,8 @@ class BouncingBall:
         self.vy = -self.vy
     self.cy = next_cy
 
+    # print(f"New coordinate: ({self.cx},{self.cy})")
+
 
 def ring(r):
     cir = np.zeros((2*r+1, 2*r+1))
