@@ -34,6 +34,9 @@ from stimulator import update_pixel_frame, BouncingBall
 import multiprocessing 
 
 import random
+import pygame
+from pygame.locals import *
+import sys
 
 global end_of_sim, input_q, output_q, spike_q
 
@@ -45,14 +48,16 @@ global end_of_sim, input_q, output_q, spike_q
 
 script_name = os.path.basename(__file__)
 
-if len(sys.argv) != 3:
-    print(f"python3 {script_name} <duration> <width>")
+if len(sys.argv) != 5:
+    print(f"python3 {script_name} <duration> <user_width> <nb_cols>")
     quit()
 else:
     try:
         RUN_TIME = 1000*int(sys.argv[1])
-        NB_COLS = int(sys.argv[2])
+        USER_WIDTH = int(sys.argv[2])
         USER_HEIGTH = 1
+        NB_COLS = int(sys.argv[3])
+        DURIN_IP = sys.argv[4]
     except:
         print("Something went wrong with the arguments")
         quit()
@@ -70,7 +75,7 @@ Y_SHIFT = 0
 X_SHIFT = 16
 
 if send_fake_spikes:
-    WIDTH = NB_COLS
+    WIDTH = USER_WIDTH
     HEIGHT = USER_HEIGTH
 else:
     WIDTH = 346
@@ -144,20 +149,15 @@ def generate_w_list(w, h, n=0):
                         print(f"{pre_idx} -> ({x},{y})")
                         pre_idx += 1
 
+                        pix_per_col = int(USER_WIDTH/NB_COLS)
                         for post_idx in range(NB_COLS):
 
                             weight = 0.000001
                             x_weight = 2*w_fovea*(abs((x+0.5)-w/2)/(w-1))
 
                             # Move right (when stimulus on the left 'hemisphere')    
-                            if post_idx == 0:
-                                if (x+0.5) < w/2:
-                                    weight = x_weight
-                                        
-                            # Move Left (when stimulus on the right 'hemisphere')
-                            if post_idx == 1:
-                                if (x+0.5) > w/2:
-                                    weight = x_weight                                                
+                            if (x >= (post_idx+0)*pix_per_col) and (x < (post_idx+1)*pix_per_col):
+                                weight = 4                                             
                             
                             conn_list.append((pre_idx, post_idx, weight, delay))
         
@@ -329,15 +329,15 @@ def set_inputs():
     print(r)
     cx = int(l*1/4)
     cy = int(w*2/4)
-    vx = -WIDTH/100
-    vy = HEIGHT/400
+    vx = -WIDTH/1000
+    vy = 0
     duration = 60
 
 
     
     bball = BouncingBall(dt, w, l, r, cx, cy, vx, vy)
 
-    fps = 50
+    fps = 30
     LED_f = 200
     ball_update = 0
     LED_update = 0
@@ -379,7 +379,7 @@ def set_inputs():
                     dx = -1
                 if command == 'right':
                     dx = 1
-            bball.update_c(False, dx, dy)
+            bball.update_c(True, dx, dy)
 
 
             # im_final = cv2.resize(mat*255,(640,480), interpolation = cv2.INTER_NEAREST)
@@ -388,7 +388,7 @@ def set_inputs():
         
 
         coor = [bball.cx, bball.cy]
-        obj_coor_q.put(coor)
+        # obj_coor_q.put(coor)
         input_q.put(events)
 
         ball_update += 1
@@ -406,7 +406,7 @@ def get_outputs():
 
     global end_of_sim, output_q, spike_q
     
-    dt = 0.100
+    dt = 0.040
     
     start = time.time()
     current_t = time.time()
@@ -444,14 +444,9 @@ def get_outputs():
 
         time.sleep(0.005)
 
-def rt_plot(i, fig, axs, t, x, y, mn_r, mn_l, mn_u, mn_d, obj_xy, spike_count):
+def rt_plot(i, fig, axs, t, cols, spike_count):
 
     global spike_q, obj_coor_q, end_of_sim
-
-
-    while not obj_coor_q.empty():
-        obj_xy = obj_coor_q.get(False)
-        # print(spike_count)
 
     while not spike_q.empty():
         spike_count = spike_q.get(False)
@@ -459,80 +454,33 @@ def rt_plot(i, fig, axs, t, x, y, mn_r, mn_l, mn_u, mn_d, obj_xy, spike_count):
     # Add x and y to lists
     t.append(datetime.datetime.now().strftime('%H:%M:%S.%f'))
 
-    x.append(obj_xy[0])
-    y.append(obj_xy[1])
+    t = t[-40:]
 
-    mn_r.append(spike_count[0])
-    mn_l.append(spike_count[1])
-    mn_u.append(spike_count[2])
-    mn_d.append(spike_count[3])
+    for i in range(NB_COLS):
+        cols[i].append(spike_count[i]) 
+        cols[i] = cols[i][-40:] # Limit x and y lists to 100 items
 
-    # Limit x and y lists to 100 items
-    t = t[-100:]
-    x = x[-100:]
-    y = y[-100:]
-    mn_r = mn_r[-100:]
-    mn_l = mn_l[-100:]
-    mn_u = mn_u[-100:]
-    mn_d = mn_d[-100:]
 
-    txt_x = txt_y = txt_l = txt_r = txt_u = txt_d = ""
-    if x[-1] != -100:
-        txt_x = "x = {:.3f} ".format(x[-1]) 
-    if y[-1] != -100:
-        txt_y = "y = {:.3f} ".format(y[-1])
-    if mn_r[-1] != -100:
-        txt_r = "r = {:.3f} ".format(mn_r[-1]) 
-    if mn_l[-1] != -100:
-        txt_l = "l = {:.3f} ".format(mn_l[-1]) 
-    if mn_u[-1] != -100:
-        txt_u = "u = {:.3f} ".format(mn_u[-1]) 
-    if mn_d[-1] != -100:
-        txt_d = "d = {:.3f} ".format(mn_d[-1])
+
+    txt_col = ""
+    
 
     # Draw x and y lists
 
     max_y = int(1.2*max(WIDTH, HEIGHT))
 
 
-    axs[0].clear()
-    axs[0].plot(t, x)
-    axs[0].plot(t, y)
-    axs[0].text(t[0], 0.75*max_y, txt_x, fontsize='xx-large')
-    axs[0].text(t[0], 0.15*max_y, txt_y, fontsize='xx-large')
-    axs[0].xaxis.set_visible(False)
-    axs[0].set_ylabel('Pixels')
-    axs[0].set_ylim([0,max_y])
-
     max_y = 40
 
-    axs[1].clear()
-    axs[1].plot(t, mn_r, color='r')
-    axs[1].text(t[0], 0.75*max_y, txt_r, fontsize='xx-large')
-    axs[1].xaxis.set_visible(False)
-    axs[1].set_ylabel('mn_r')
-    axs[1].set_ylim([0,max_y])
+    for i in range(NB_COLS):
 
-    axs[2].clear()
-    axs[2].plot(t, mn_l, color='g')
-    axs[2].text(t[0], 0.75*max_y, txt_l, fontsize='xx-large')
-    axs[2].xaxis.set_visible(False)
-    axs[2].set_ylabel('mn_l')
-    axs[2].set_ylim([0,max_y])
-
-    axs[3].clear()
-    axs[3].plot(t, mn_u, color='r')
-    axs[3].text(t[0], 0.75*max_y, txt_u, fontsize='xx-large')
-    axs[3].xaxis.set_visible(False)
-    axs[3].set_ylabel('mn_u')
-    axs[3].set_ylim([0,max_y])
-
-    axs[4].clear()
-    axs[4].plot(t, mn_d, color='g')
-    axs[4].text(t[0], 0.75*max_y, txt_d, fontsize='xx-large')
-    axs[4].xaxis.set_visible(False)
-    axs[4].set_ylabel('mn_d')
-    axs[4].set_ylim([0,max_y])
+        axs[i].clear()
+        axs[i].plot(t, cols[i], color='g')
+        # axs[i].text(t[0], 0.75*max_y, txt_col, fontsize='xx-large')
+        axs[i].xaxis.set_visible(False)
+        axs[i].yaxis.set_visible(False)
+        # axs[i].set_ylabel(f'col_{i}')
+        axs[i].set_ylim([0,max_y])
 
 
     if end_of_sim.value == 1:
@@ -548,24 +496,20 @@ def oscilloscope():
     print("Starting Oscilloscope")
 
     # Create figure for plotting
-    fig, axs = plt.subplots(5, figsize=(8, 8))
+    fig, axs = plt.subplots(NB_COLS, figsize=(8, 8))
     fig.canvas.manager.set_window_title('World Space')
 
 
     t = []
-    x = []
-    y = []
-    mn_r = []
-    mn_l = []
-    mn_u = []
-    mn_d = []
+    cols = []
+    for j in range(NB_COLS):
+        cols.append([])
 
     i = 0
-    spike_count = [-100,-100,-100,-100]
-    obj_xy = [-100,-100]
+    spike_count = np.ones(NB_COLS, )*(-40)
 
     # Set up plot to call rt_xyz() function periodically
-    ani = animation.FuncAnimation(fig, rt_plot, fargs=(fig, axs, t, x, y, mn_r, mn_l, mn_u, mn_d, obj_xy, spike_count), interval=1)
+    ani = animation.FuncAnimation(fig, rt_plot, fargs=(fig, axs, t, cols, spike_count), interval=1)
     plt.show()
 
 
@@ -622,6 +566,15 @@ def update_viewer():
 
     return image.astype('uint8')
 
+def run_screen():
+
+    global control_q
+
+
+    viewer = Viewer(update_viewer, control_q, (640, 64))
+    viewer.start()
+
+
 if __name__ == '__main__':
 
     global end_of_sim, input_q, output_q, spike_q, obj_coor_q, control_q, shared_pix_mat
@@ -645,32 +598,29 @@ if __name__ == '__main__':
 
 
     p_o_data = multiprocessing.Process(target=get_outputs, args=())
-    p_visual = multiprocessing.Process(target=oscilloscope, args=())
+    p_rt_osc = multiprocessing.Process(target=oscilloscope, args=())
+    p_screen = multiprocessing.Process(target=run_screen, args=())
     p_spiNN = multiprocessing.Process(target=run_spinnaker_sim, args=())
+
     
 
-    p_o_data.start()
-    p_visual.start()
-    p_spiNN.start()
 
     # run_spinnaker_sim()
 
-    import pygame
-    from pygame.locals import *
-    import sys
+    print(DURIN_IP)
+    with Durin(DURIN_IP, stream_command=StreamOn("172.16.223.87", 4501, 100)) as durin:
+        
+        p_o_data.start()
+        p_rt_osc.start()
+        p_screen.start()
+        p_spiNN.start()
 
+        while True:
+            time.sleep(1)
 
-    viewer = Viewer(update_viewer, control_q, (NB_COLS*40, USER_HEIGTH*40))
-    viewer.start()
-    
-    # while True:
-
-    #     if end_of_sim.value == 1:
-    #         time.sleep(1)
-    #         print("No more commands to be executed.")
-    #         break
 
 
     p_spiNN.join()
     p_o_data.join()
-    p_visual.join()
+    p_rt_osc.join()
+    p_screen.join()
