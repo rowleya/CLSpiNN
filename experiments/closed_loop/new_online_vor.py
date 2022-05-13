@@ -1,4 +1,4 @@
-import spynnaker8 as p
+import pyNN.spiNNaker as p
 from pyNN.space import Grid2D
 from spinn_front_end_common.utilities.database import DatabaseConnection
 import socket
@@ -45,14 +45,15 @@ else:
     try:
         RUN_TIME = 1000*int(sys.argv[1])
         USER_WIDTH = int(sys.argv[2])
-        USER_HEIGTH = int(USER_WIDTH*3/4)
+        USER_HEIGTH = int(int(sys.argv[2])*3/4)
     except:
         print("Something went wrong with the arguments")
         quit()
 print("\n About to start things ... \n")
 
 # Device parameters are "pipe", "chip_coords", "ip_address", "port"
-DEVICE_PARAMETERS = (0, (0, 0), "172.16.223.90", 3333)
+DEVICE_PARAMETERS = (0, (0, 0), "172.16.223.11", 3333)
+PORT_SPIN2CPU = 12419
 
 send_fake_spikes = True
 
@@ -116,47 +117,55 @@ def receive_spikes_from_sim(label, time, neuron_ids):
 ''' 
 This function creates a list of weights to be used when connecting pixels to motor neurons
 '''
-def create_conn_list(w, h):
+def create_conn_list(w, h, n=0):
     w_fovea = 2
     conn_list = []
     
 
     delay = 1 # 1 [ms]
-    for y in range(h):
-        for x in range(w):
-            pre_idx = y*w+x
+    nb_col = math.ceil(w/n)
+    nb_row = math.ceil(h/n)
 
-            for post_idx in range(4):
+    pre_idx = -1
+    for h_block in range(nb_row):
+        for v_block in range(nb_col):
+            for row in range(n):
+                for col in range(n):
+                    x = v_block*n+col
+                    y = h_block*n+row
+                    if x<w and y<h:
+                        print(f"{pre_idx} -> ({x},{y})")
+                        pre_idx += 1
 
-                weight = 0.000001
-                x_weight = 2*w_fovea*(abs((x+0.5)-w/2)/(w-1))
-                y_weight = 2*w_fovea*(abs((y+0.5)-h/2)/(h-1))
+                        for post_idx in range(4):
 
-                # Move right (when stimulus on the left 'hemisphere')    
-                if post_idx == 0:
-                    if (x+0.5) < w/2:
-                        weight = x_weight
+                            weight = 0.000001
+                            x_weight = 2*w_fovea*(abs((x+0.5)-w/2)/(w-1))
+                            y_weight = 2*w_fovea*(abs((y+0.5)-h/2)/(h-1))
+
+                            # Move right (when stimulus on the left 'hemisphere')    
+                            if post_idx == 0:
+                                if (x+0.5) < w/2:
+                                    weight = x_weight
+                                        
+                            # Move Left (when stimulus on the right 'hemisphere')
+                            if post_idx == 1:
+                                if (x+0.5) > w/2:
+                                    weight = x_weight
+                                                
+                            # Move up (when stimulus on the bottom 'hemisphere')    
+                            if post_idx == 2: 
+                                if (y+0.5) > h/2: # higher pixel --> bottom of image
+                                    weight = y_weight
                             
-                # Move Left (when stimulus on the right 'hemisphere')
-                if post_idx == 1:
-                    if (x+0.5) > w/2:
-                        weight = x_weight
-                                    
-                # Move up (when stimulus on the bottom 'hemisphere')    
-                if post_idx == 2: 
-                    if (y+0.5) > h/2: # higher pixel --> bottom of image
-                        weight = y_weight
-                
-                # Move down (when stimulus on the top 'hemisphere') 
-                if post_idx == 3:
-                    if (y+0.5) < h/2: # lower pixel --> top of image
-                        weight = y_weight
-                
-                conn_list.append((pre_idx, post_idx, weight, delay))
+                            # Move down (when stimulus on the top 'hemisphere') 
+                            if post_idx == 3:
+                                if (y+0.5) < h/2: # lower pixel --> top of image
+                                    weight = y_weight
+                            
+                            conn_list.append((pre_idx, post_idx, weight, delay))
         
     return conn_list
-
-
 '''
 This function launches the input generator and packs generated events to send them to SpiNNaker
 '''
@@ -261,7 +270,8 @@ def run_spinnaker_sim():
 
     dev = p.Population(None, p.external_devices.SPIFRetinaDevice(
         pipe=pipe, width=WIDTH, height=HEIGHT, sub_width=SUB_WIDTH,
-        sub_height=SUB_HEIGHT, input_x_shift=X_SHIFT, input_y_shift=Y_SHIFT))
+        sub_height=SUB_HEIGHT, input_x_shift=X_SHIFT, input_y_shift=Y_SHIFT, 
+        chip_coords=chip_coords, base_key=None, board_address=None))
 
     # Create a population that captures the spikes from the input
     capture = p.Population(WIDTH * HEIGHT, p.IF_curr_exp(), 
@@ -285,7 +295,7 @@ def run_spinnaker_sim():
     motor_neurons = p.Population(4, celltype(**cell_params), label="motor_neurons")
 
 
-    conn_list = create_conn_list(WIDTH, HEIGHT)
+    conn_list = create_conn_list(WIDTH, HEIGHT, SUB_HEIGHT*SUB_WIDTH)
 
 
     cell_conn = p.FromListConnector(conn_list, safe=True)  
@@ -293,7 +303,7 @@ def run_spinnaker_sim():
     con_move = p.Projection(capture, motor_neurons, cell_conn, receptor_type='excitatory')
         
     # Spike reception (from SpiNNaker to CPU)
-    port_generator = get_port(14000)
+    port_generator = get_port(PORT_SPIN2CPU)
     port = next(port_generator)
     live_spikes_receiver = p.external_devices.SpynnakerLiveSpikesConnection(receive_labels=["motor_neurons"], local_port=port)
     _ = p.external_devices.activate_live_output_for(motor_neurons, database_notify_port_num=live_spikes_receiver.local_port)
@@ -498,7 +508,7 @@ def rt_plot(i, fig, axs, t, x, y, mn_r, mn_l, mn_u, mn_d, obj_xy, spike_count):
     axs[0].set_ylabel('Pixels')
     axs[0].set_ylim([0,max_y])
 
-    max_y = 100
+    max_y = 200
 
     axs[1].clear()
     axs[1].plot(t, mn_r, color='r')
@@ -654,7 +664,7 @@ if __name__ == '__main__':
     import sys
 
 
-    viewer = Viewer(update, control_q, (346, 260))
+    viewer = Viewer(update, control_q, (346, int(USER_HEIGTH*346/USER_WIDTH)))
     viewer.start()
     
     # while True:
