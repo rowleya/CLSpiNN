@@ -607,20 +607,58 @@ if __name__ == '__main__':
 
     # run_spinnaker_sim()
 
+    printing = True
     print(DURIN_IP)
     with Durin(DURIN_IP, stream_command=StreamOn("172.16.223.87", 4501, 100)) as durin:
         
-        p_o_data.start()
-        p_rt_osc.start()
-        p_screen.start()
-        p_spiNN.start()
+        # p_o_data.start()
+        # p_rt_osc.start()
+        # p_screen.start()
+        # p_spiNN.start()
+
+        nb_cols = USER_WIDTH # number of input neurons on SpiNN-5
+        noise = 10000
+        freq = 100 # Hz
+        
+
+        timestamp = time.time()
+        acc = 0
+        small_dvs = torch.zeros((nb_cols,))
 
         while True:
-            time.sleep(1)
+            
+            (obs, dvs, cmd) = durin.read()
+            small_dvs += dvs.numpy().reshape(nb_cols,-1, int(640/nb_cols)).sum(axis=1).sum(axis=1)
+            acc += small_dvs.sum()
+
+            current = time.time()
+            if current - timestamp > 1/freq:
+
+                max_idx = small_dvs.argmax()
+
+                # Show 'O' as pendulum ... 
+                if printing:
+                    activity = int(acc*freq)       
+                    if activity > noise:                     
+                        line = "\r"
+                        for i in range(nb_cols):
+                            if i == max_idx:
+                                line = line + "O"
+                            else:
+                                line = line + " "
+                        print(line, end =" ")
+
+                timestamp = current
+                acc = 0
+                small_dvs = torch.zeros((nb_cols,))
+
+            
+
+            
 
 
 
-    p_spiNN.join()
-    p_o_data.join()
-    p_rt_osc.join()
-    p_screen.join()
+    # p_spiNN.join()
+    # p_o_data.join()
+    # p_rt_osc.join()
+    # p_screen.join()
