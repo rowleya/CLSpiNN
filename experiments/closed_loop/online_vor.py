@@ -1,4 +1,4 @@
-import spynnaker8 as p
+import pyNN.spiNNaker as p
 from pyNN.space import Grid2D
 from spinn_front_end_common.utilities.database import DatabaseConnection
 import socket
@@ -7,11 +7,14 @@ import math
 import collections
 
 import cv2
+import pygame
+from pygame.locals import *
+import sys
 
 import datetime
 import time
 import numpy as np
-from random import randint, random
+import random
 from struct import pack
 from time import sleep
 import sys
@@ -38,21 +41,22 @@ global end_of_sim, input_q, output_q, spike_q
 
 script_name = os.path.basename(__file__)
 
-if len(sys.argv) != 4:
-    print(f"python3 {script_name} <duration> <width> <height>")
+if len(sys.argv) != 3:
+    print(f"python3 {script_name} <duration> <width>")
     quit()
 else:
     try:
         RUN_TIME = 1000*int(sys.argv[1])
         USER_WIDTH = int(sys.argv[2])
-        USER_HEIGTH = int(sys.argv[3])
+        USER_HEIGTH = int(int(sys.argv[2])*3/4)
     except:
         print("Something went wrong with the arguments")
         quit()
 print("\n About to start things ... \n")
 
 # Device parameters are "pipe", "chip_coords", "ip_address", "port"
-DEVICE_PARAMETERS = (0, (0, 0), "172.16.223.90", 3333)
+DEVICE_PARAMETERS = (0, (0, 0), "172.16.223.98", 3333)
+PORT_SPIN2CPU = int(random.randint(12000,15000))
 
 send_fake_spikes = True
 
@@ -74,7 +78,7 @@ SUB_WIDTH = 2*SUB_HEIGHT
 print(f"Creating {SUB_WIDTH}*{SUB_HEIGHT}={SUB_WIDTH*SUB_HEIGHT} neurons per core")
 
 # Weight of connections between "layers"
-WEIGHT = 100
+WEIGHT = 10
 
 
 
@@ -82,6 +86,9 @@ WEIGHT = 100
 SLEEP_TIME = 0.005
 N_PACKETS = 1000
 
+
+M_LABELS = ["go_right", "go_left", "go_up", "go_down"]
+NB_PTS = 100
 
 print(f"SPIF : {DEVICE_PARAMETERS[2]}:{DEVICE_PARAMETERS[3]}")
 print(f"Pixel Matrix : {WIDTH}x{HEIGHT} (Real={not send_fake_spikes})")
@@ -92,15 +99,6 @@ print(f"Run Time : {RUN_TIME}")
 #################################################################################################################################
 #                                                                                                                               #
 #################################################################################################################################
-
-'''
-This function returns a port number to be used during SpikeLiveConnection
-'''
-def get_port(first_val):
-    count = 0
-    while True:
-        count += 1
-        yield first_val + count
 
 '''
 This is what's done whenever the CPU receives a spike sent by SpiNNaker
@@ -116,57 +114,62 @@ def receive_spikes_from_sim(label, time, neuron_ids):
 ''' 
 This function creates a list of weights to be used when connecting pixels to motor neurons
 '''
-def create_conn_list(w, h):
+def create_conn_list(w, h, n=0):
     w_fovea = 2
     conn_list = []
     
 
     delay = 1 # 1 [ms]
-    for y in range(h):
-        for x in range(w):
-            pre_idx = y*w+x
+    nb_col = math.ceil(w/n)
+    nb_row = math.ceil(h/n)
 
-            for post_idx in range(4):
+    pre_idx = -1
+    for h_block in range(nb_row):
+        for v_block in range(nb_col):
+            for row in range(n):
+                for col in range(n):
+                    x = v_block*n+col
+                    y = h_block*n+row
+                    if x<w and y<h:
+                        print(f"{pre_idx} -> ({x},{y})")
+                        pre_idx += 1
 
-                weight = 0.000001
-                x_weight = 2*w_fovea*(abs((x+0.5)-w/2)/(w-1))
-                y_weight = 2*w_fovea*(abs((y+0.5)-h/2)/(h-1))
+                        for post_idx in range(4):
 
-                # Move right (when stimulus on the left 'hemisphere')    
-                if post_idx == 0:
-                    if (x+0.5) < w/2:
-                        weight = x_weight
+                            weight = 0.000001
+                            x_weight = 2*w_fovea*(abs((x+0.5)-w/2)/(w-1))
+                            y_weight = 2*w_fovea*(abs((y+0.5)-h/2)/(h-1))
+
+                            # Move right (when stimulus on the left 'hemisphere')    
+                            if post_idx == 0:
+                                if (x+0.5) < w/2:
+                                    weight = x_weight
+                                        
+                            # Move Left (when stimulus on the right 'hemisphere')
+                            if post_idx == 1:
+                                if (x+0.5) > w/2:
+                                    weight = x_weight
+                                                
+                            # Move up (when stimulus on the bottom 'hemisphere')    
+                            if post_idx == 2: 
+                                if (y+0.5) > h/2: # higher pixel --> bottom of image
+                                    weight = y_weight
                             
-                # Move Left (when stimulus on the right 'hemisphere')
-                if post_idx == 1:
-                    if (x+0.5) > w/2:
-                        weight = x_weight
-                                    
-                # Move up (when stimulus on the bottom 'hemisphere')    
-                if post_idx == 2: 
-                    if (y+0.5) > h/2: # higher pixel --> bottom of image
-                        weight = y_weight
-                
-                # Move down (when stimulus on the top 'hemisphere') 
-                if post_idx == 3:
-                    if (y+0.5) < h/2: # lower pixel --> top of image
-                        weight = y_weight
-                
-                conn_list.append((pre_idx, post_idx, weight, delay))
+                            # Move down (when stimulus on the top 'hemisphere') 
+                            if post_idx == 3:
+                                if (y+0.5) < h/2: # lower pixel --> top of image
+                                    weight = y_weight
+                            
+                            conn_list.append((pre_idx, post_idx, weight, delay))
         
     return conn_list
-
-
 '''
 This function launches the input generator and packs generated events to send them to SpiNNaker
 '''
 def launch_input_handler():
 
-    global DEVICE_PARAMETERS
-
+    global X_SHIFT, Y_SHIFT, P_SHIFT, SLEEP_TIME, N_PACKETS, DEVICE_PARAMETERS
     global end_of_sim, input_q
-
-    global X_SHIFT, Y_SHIFT, P_SHIFT, SLEEP_TIME, N_PACKETS
 
     p_i_data = multiprocessing.Process(target=set_inputs, args=())
     p_i_data.start()
@@ -241,61 +244,29 @@ def run_spinnaker_sim():
     # Set the number of neurons per core 
     p.set_number_of_neurons_per_core(p.IF_curr_exp, SUB_HEIGHT*SUB_WIDTH)
 
-    if send_fake_spikes:
-        # This is only used with the above to send data to the Ethernet
-        connection = DatabaseConnection(launch_input_handler, local_port=None)
-
-        print(f"DB Connection port = {connection.local_port}")
-        # time.sleep(5)
-
-        # This is used with the connection so that it starts sending when the simulation starts
-        p.external_devices.add_database_socket_address(None, connection.local_port, None)
-
     capture_conn = p.ConvolutionConnector([[WEIGHT]])
 
     # These are our external retina devices connected to SPIF devices
-    devices = list()
-    captures = list()
     pipe = DEVICE_PARAMETERS[0]
     chip_coords = DEVICE_PARAMETERS[1]
 
     dev = p.Population(None, p.external_devices.SPIFRetinaDevice(
         pipe=pipe, width=WIDTH, height=HEIGHT, sub_width=SUB_WIDTH,
-        sub_height=SUB_HEIGHT, input_x_shift=X_SHIFT, input_y_shift=Y_SHIFT))
+        sub_height=SUB_HEIGHT, input_x_shift=X_SHIFT, input_y_shift=Y_SHIFT, 
+        chip_coords=chip_coords, base_key=None, board_address=None))
 
     # Create a population that captures the spikes from the input
-    capture = p.Population(WIDTH * HEIGHT, p.IF_curr_exp(), 
-                            structure=Grid2D(WIDTH / HEIGHT),
-                            label=f"Capture for device SPIF")
+    capture = p.Population(WIDTH * HEIGHT, p.IF_curr_exp(), structure=Grid2D(WIDTH / HEIGHT), label=f"Capture for device SPIF")
 
     p.Projection(dev, capture, capture_conn, p.Convolution())
 
-    # Record the spikes so we know what happened
-    # capture.record("spikes")
-
-    # Save for later use
-    devices.append(dev)
-    captures.append(capture)
-
-
-    m_labels = ["go_right", "go_left", "go_up", "go_down"]
-        
-
-
     motor_neurons = p.Population(4, celltype(**cell_params), label="motor_neurons")
-
-
-    conn_list = create_conn_list(WIDTH, HEIGHT)
-
-
-    cell_conn = p.FromListConnector(conn_list, safe=True)  
-    
+    conn_list = create_conn_list(WIDTH, HEIGHT, SUB_HEIGHT*SUB_WIDTH)
+    cell_conn = p.FromListConnector(conn_list, safe=True)      
     con_move = p.Projection(capture, motor_neurons, cell_conn, receptor_type='excitatory')
         
     # Spike reception (from SpiNNaker to CPU)
-    port_generator = get_port(14000)
-    port = next(port_generator)
-    live_spikes_receiver = p.external_devices.SpynnakerLiveSpikesConnection(receive_labels=["motor_neurons"], local_port=port)
+    live_spikes_receiver = p.external_devices.SpynnakerLiveSpikesConnection(receive_labels=["motor_neurons"], local_port=PORT_SPIN2CPU)
     _ = p.external_devices.activate_live_output_for(motor_neurons, database_notify_port_num=live_spikes_receiver.local_port)
     live_spikes_receiver.add_receive_callback("motor_neurons", receive_spikes_from_sim)
 
@@ -311,17 +282,14 @@ def run_spinnaker_sim():
     p.end()
 
 
-
- 
-
 def set_inputs():
 
-    global end_of_sim, input_q, object_q
+    global end_of_sim, input_q, obj_coor_q, control_q, shared_pix_mat
 
     dt = 1 #ms
     l = WIDTH
     w = HEIGHT
-    r = 0*min(8, int(WIDTH*7/637+610/637))
+    r = min(8, int(WIDTH*7/637+610/637))
     print(r)
     cx = int(l*1/4)
     cy = int(w*2/4)
@@ -357,19 +325,34 @@ def set_inputs():
             LED_on = 1 - LED_on
 
         mat, events = update_pixel_frame(bball, LED_on)
+        if LED_on:
+            pix_mat_mp, pix_mat_np = shared_pix_mat
+            pix_mat_np[:,:] = np.transpose(mat)
 
         if ball_update >= 1000/fps:
             ball_update = 0      
-            bball.update_c(True)
+            dx = 0
+            dy = 0
+            while not control_q.empty():
+                command = control_q.get(False)
+                if command == 'up':
+                    dy = -1   
+                if command == 'down':
+                    dy = 1   
+                if command == 'left':
+                    dx = -1
+                if command == 'right':
+                    dx = 1
+            bball.update_c(True, dx, dy)
 
 
             # im_final = cv2.resize(mat*255,(640,480), interpolation = cv2.INTER_NEAREST)
-            cv2.imshow("Pixel Space", mat*255)
-            cv2.waitKey(1) 
+            # cv2.imshow("Pixel Space", mat*255)
+            # cv2.waitKey(1) 
         
 
         coor = [bball.cx, bball.cy]
-        object_q.put(coor)
+        obj_coor_q.put(coor)
         input_q.put(events)
 
         ball_update += 1
@@ -423,53 +406,31 @@ def get_outputs():
 
         time.sleep(0.005)
 
-def rt_plot(i, fig, axs, t, x, y, mn_r, mn_l, mn_u, mn_d, obj_xy, spike_count):
+def rt_plot(i, fig, axs, t, x, y, mn, obj_xy, spike_count):
 
-    global spike_q, object_q, end_of_sim
+    global spike_q, obj_coor_q, end_of_sim
 
 
-    while not object_q.empty():
-        obj_xy = object_q.get(False)
+    while not obj_coor_q.empty():
+        obj_xy = obj_coor_q.get(False)
         # print(spike_count)
 
     while not spike_q.empty():
         spike_count = spike_q.get(False)
 
     # Add x and y to lists
+    txt_x = txt_y = ""
     t.append(datetime.datetime.now().strftime('%H:%M:%S.%f'))
+    t = t[-NB_PTS:]
 
     x.append(obj_xy[0])
     y.append(obj_xy[1])
-
-    mn_r.append(spike_count[0])
-    mn_l.append(spike_count[1])
-    mn_u.append(spike_count[2])
-    mn_d.append(spike_count[3])
-
-    # Limit x and y lists to 100 items
-    t = t[-100:]
-    x = x[-100:]
-    y = y[-100:]
-    mn_r = mn_r[-100:]
-    mn_l = mn_l[-100:]
-    mn_u = mn_u[-100:]
-    mn_d = mn_d[-100:]
-
-    txt_x = txt_y = txt_l = txt_r = txt_u = txt_d = ""
-    if x[-1] != -100:
+    x = x[-NB_PTS:]
+    y = y[-NB_PTS:]
+    if x[-1] != -NB_PTS:
         txt_x = "x = {:.3f} ".format(x[-1]) 
-    if y[-1] != -100:
+    if y[-1] != -NB_PTS:
         txt_y = "y = {:.3f} ".format(y[-1])
-    if mn_r[-1] != -100:
-        txt_r = "r = {:.3f} ".format(mn_r[-1]) 
-    if mn_l[-1] != -100:
-        txt_l = "l = {:.3f} ".format(mn_l[-1]) 
-    if mn_u[-1] != -100:
-        txt_u = "u = {:.3f} ".format(mn_u[-1]) 
-    if mn_d[-1] != -100:
-        txt_d = "d = {:.3f} ".format(mn_d[-1])
-
-    # Draw x and y lists
 
     max_y = int(1.2*max(WIDTH, HEIGHT))
 
@@ -483,35 +444,19 @@ def rt_plot(i, fig, axs, t, x, y, mn_r, mn_l, mn_u, mn_d, obj_xy, spike_count):
     axs[0].set_ylabel('Pixels')
     axs[0].set_ylim([0,max_y])
 
-    max_y = 100
 
-    axs[1].clear()
-    axs[1].plot(t, mn_r, color='r')
-    axs[1].text(t[0], 0.75*max_y, txt_r, fontsize='xx-large')
-    axs[1].xaxis.set_visible(False)
-    axs[1].set_ylabel('mn_r')
-    axs[1].set_ylim([0,max_y])
+    max_y = 200
 
-    axs[2].clear()
-    axs[2].plot(t, mn_l, color='g')
-    axs[2].text(t[0], 0.75*max_y, txt_l, fontsize='xx-large')
-    axs[2].xaxis.set_visible(False)
-    axs[2].set_ylabel('mn_l')
-    axs[2].set_ylim([0,max_y])
+    for i in range(4):
+        mn[i].append(spike_count[i])
+        mn[i] = mn[i][-NB_PTS:]
 
-    axs[3].clear()
-    axs[3].plot(t, mn_u, color='r')
-    axs[3].text(t[0], 0.75*max_y, txt_u, fontsize='xx-large')
-    axs[3].xaxis.set_visible(False)
-    axs[3].set_ylabel('mn_u')
-    axs[3].set_ylim([0,max_y])
+        axs[i+1].clear()
+        axs[i+1].plot(t, mn[i], color='g')
+        axs[i+1].xaxis.set_visible(False)
+        axs[i+1].set_ylabel(M_LABELS[i])
+        axs[i+1].set_ylim([0,max_y])
 
-    axs[4].clear()
-    axs[4].plot(t, mn_d, color='g')
-    axs[4].text(t[0], 0.75*max_y, txt_d, fontsize='xx-large')
-    axs[4].xaxis.set_visible(False)
-    axs[4].set_ylabel('mn_d')
-    axs[4].set_ylim([0,max_y])
 
 
     if end_of_sim.value == 1:
@@ -534,43 +479,128 @@ def oscilloscope():
     t = []
     x = []
     y = []
-    mn_r = []
-    mn_l = []
-    mn_u = []
-    mn_d = []
+
+    mn = []
+    for i in range(4):
+        mn.append([])
 
     i = 0
-    spike_count = [-100,-100,-100,-100]
-    obj_xy = [-100,-100]
+    obj_xy = -NB_PTS*np.ones((2,))
+    spike_count = -NB_PTS*np.ones((4,))
 
     # Set up plot to call rt_xyz() function periodically
-    ani = animation.FuncAnimation(fig, rt_plot, fargs=(fig, axs, t, x, y, mn_r, mn_l, mn_u, mn_d, obj_xy, spike_count), interval=1)
+    ani = animation.FuncAnimation(fig, rt_plot, fargs=(fig, axs, t, x, y, mn, obj_xy, spike_count), interval=1)
     plt.show()
+
+
+class Viewer:
+    def __init__(self, update_func, control_q, display_size):
+        self.display_size = display_size
+        self.update_func = update_func
+        self.control_q = control_q
+        pygame.init()
+        self.display = pygame.display.set_mode(display_size)
+    
+    def set_title(self, title):
+        pygame.display.set_caption(title)
+    
+    def start(self):
+        running = True
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_w:
+                        print(u"\u2191")
+                        control_q.put('up')
+                    if event.key == pygame.K_s:
+                        print(u"\u2193")
+                        control_q.put('down')
+                    if event.key == pygame.K_a:
+                        print(u"\u2190")
+                        control_q.put('left')
+                    if event.key == pygame.K_d:
+                        print(u"\u2192")
+                        control_q.put('right')
+
+            Z = self.update_func()
+            surf = pygame.surfarray.make_surface(Z)
+            surf = pygame.transform.scale(surf, self.display_size)
+
+            self.display.blit(surf, (0, 0))
+
+            pygame.display.update()
+
+        pygame.quit()
+
+def update():
+
+    global shared_pix_mat
+
+    pix_mat_mp, pix_mat_np = shared_pix_mat
+    
+    image = np.zeros((pix_mat_np.shape[0],pix_mat_np.shape[1],3))
+    image[:,:,1] = pix_mat_np*255
+
+    return image.astype('uint8')
+
+def show_screen():
+
+    global control_q, end_of_sim
+
+
+    viewer = Viewer(update, control_q, (346, int(USER_HEIGTH*346/USER_WIDTH)))
+    viewer.start()
+    
+
 
 if __name__ == '__main__':
 
-    global end_of_sim, input_q, output_q, spike_q, object_q
+    global end_of_sim, input_q, output_q, spike_q, obj_coor_q, control_q, shared_pix_mat
     
 
     manager = multiprocessing.Manager()
 
     end_of_sim = manager.Value('i', 0)
-    input_q = multiprocessing.Queue()
-    output_q = multiprocessing.Queue()
-    spike_q = multiprocessing.Queue()
-    object_q = multiprocessing.Queue()
+    pix_mat_mp = multiprocessing.Array('I', int(np.prod((WIDTH, HEIGHT))), lock=multiprocessing.Lock())
+    pix_mat_np = np.frombuffer(pix_mat_mp.get_obj(), dtype='I').reshape((WIDTH, HEIGHT))
+
+    shared_pix_mat = (pix_mat_mp, pix_mat_np)
+
+    input_q = multiprocessing.Queue() # events
+    control_q = multiprocessing.Queue() # commands
+    output_q = multiprocessing.Queue() # events
+    spike_q = multiprocessing.Queue() # signals
+    obj_coor_q = multiprocessing.Queue() # visualization
 
 
 
 
+    p_i_data = multiprocessing.Process(target=launch_input_handler, args=())
     p_o_data = multiprocessing.Process(target=get_outputs, args=())
     p_visual = multiprocessing.Process(target=oscilloscope, args=())
+    p_screen = multiprocessing.Process(target=show_screen, args=())
+    p_spiNN = multiprocessing.Process(target=run_spinnaker_sim, args=())
     
 
+    p_i_data.start()
     p_o_data.start()
     p_visual.start()
+    p_screen.start()
+    p_spiNN.start()
 
-    run_spinnaker_sim()
+    
+    while True:
 
-    p_o_data.join()
+        if end_of_sim.value == 1:
+            time.sleep(1)
+            print("No more commands to be executed.")
+            break
+
+
+    p_spiNN.join()
+    p_screen.join()
     p_visual.join()
+    p_o_data.join()
+    p_i_data.join()
