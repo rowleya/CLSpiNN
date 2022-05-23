@@ -77,7 +77,7 @@ class Computer:
 
     def __init__(self, args, output_q):
         self.run_time = int(args.runtime)*1000 # in [ms]
-        self.w_fovea = 2
+        self.w_fovea = 8
         self.width = int(args.width)
         self.height = int(args.height)
         self.pipe = int(args.pipe)
@@ -118,7 +118,7 @@ class Computer:
 
         # Create a population that captures the spikes from the input
         capture = p.Population(self.width * self.height, p.IF_curr_exp(), structure=Grid2D(self.width / self.height), label=f"Capture for device SPIF")
-        capture_conn = p.ConvolutionConnector([[10]])
+        capture_conn = p.ConvolutionConnector([[1]])
         p.Projection(dev, capture, capture_conn, p.Convolution())
 
 

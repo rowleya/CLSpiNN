@@ -67,8 +67,8 @@ class Stimulator:
         print(r)
         cx = int(l*1/4)
         cy = int(w*2/4)
-        vx = -self.w/100
-        vy = self.h/400
+        vx = -self.w/400
+        vy = self.h/1000
         duration = 60
 
 
@@ -115,10 +115,6 @@ class Stimulator:
                         dx = 1
                 bball.update_c(self.mode, dx, dy)
 
-
-                # im_final = cv2.resize(mat*255,(640,480), interpolation = cv2.INTER_NEAREST)
-                # cv2.imshow("Pixel Space", mat*255)
-                # cv2.waitKey(1) 
             
 
             coor = [bball.cx, bball.cy]
