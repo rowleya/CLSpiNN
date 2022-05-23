@@ -24,12 +24,12 @@ Y_SHIFT = 0
 X_SHIFT = 16
 
 class Stimulator:
-    def __init__(self, d_params, end_of_sim):
+    def __init__(self, args, end_of_sim):
         self.display = []
-        self.ip_addr = d_params[0]
-        self.port = int(d_params[1])
-        self.h = d_params[2]
-        self.w = d_params[3]
+        self.ip_addr = args.ip
+        self.port = int(args.port)
+        self.h = int(args.height)
+        self.w = int(args.width)
         self.mode = True # Automatic
         self.display_size = (346, int(self.h*346/self.w))
         self.input_q = multiprocessing.Queue()

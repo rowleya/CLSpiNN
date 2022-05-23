@@ -1,34 +1,32 @@
-import pyNN.spiNNaker as p
-from pyNN.space import Grid2D
-from spinn_front_end_common.utilities.database import DatabaseConnection
+
+import multiprocessing 
 import socket
 import pdb
 import math
-import collections
-
-import cv2
-import pygame
-from pygame.locals import *
 import sys
-
+import os
 import datetime
 import time
 import numpy as np
 import random
 from struct import pack
-from time import sleep
-import sys
-sys.path.insert(1, '../../miscelaneous')
-import os
-from threading import Thread
 
+# SpiNNaker imports
+import pyNN.spiNNaker as p
+from pyNN.space import Grid2D
+import collections
+
+# Input imports
+import pygame
+sys.path.insert(1, '../../miscelaneous')
+from stimulator import update_pixel_frame, BouncingBall
+
+# Oscilloscope Imports
 import matplotlib
-matplotlib.use("TkAgg")
-matplotlib.rcParams['toolbar'] = 'None' 
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from stimulator import update_pixel_frame, BouncingBall
-import multiprocessing 
+matplotlib.use("TkAgg")
+matplotlib.rcParams['toolbar'] = 'None' 
 
 
 global end_of_sim, input_q, output_q, spike_q
@@ -447,15 +445,15 @@ def rt_plot(i, fig, axs, t, x, y, mn, obj_xy, spike_count):
 
     max_y = 200
 
-    for i in range(4):
-        mn[i].append(spike_count[i])
-        mn[i] = mn[i][-NB_PTS:]
+    for j in range(4):
+        mn[j].append(spike_count[j])
+        mn[j] = mn[j][-NB_PTS:]
 
-        axs[i+1].clear()
-        axs[i+1].plot(t, mn[i], color='g')
-        axs[i+1].xaxis.set_visible(False)
-        axs[i+1].set_ylabel(M_LABELS[i])
-        axs[i+1].set_ylim([0,max_y])
+        axs[j+1].clear()
+        axs[j+1].plot(t, mn[j], color='g')
+        axs[j+1].xaxis.set_visible(False)
+        axs[j+1].set_ylabel(M_LABELS[j])
+        axs[j+1].set_ylim([0,max_y])
 
 
 

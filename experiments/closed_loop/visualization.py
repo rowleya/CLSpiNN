@@ -89,10 +89,8 @@ class Oscilloscope:
             spike_count = self.spike_q.get(False)
 
         # Add x and y to lists
-        self.t.append(datetime.datetime.now().strftime('%H:%M:%S.%f'))
+        self.t.append(time.time())
         self.t = self.t[-NB_PTS:]
-
-
 
 
         max_y = 200
