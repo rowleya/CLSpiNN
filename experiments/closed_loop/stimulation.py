@@ -4,15 +4,13 @@ import socket
 import pdb
 import math
 import sys
-import os
 import datetime
 import time
 import numpy as np
 import random
 from struct import pack
-
-
-# Input imports
+import os
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
 
 
