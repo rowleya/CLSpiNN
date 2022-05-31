@@ -78,9 +78,9 @@ class Computer:
     def __init__(self, args, output_q):
         self.run_time = int(args.runtime)*1000 # in [ms]
         self.w_fovea = 8
-        self.width = int(args.width)
-        self.height = int(args.height)
-        self.pipe = int(args.pipe)
+        self.width = args.width
+        self.height = int(args.width*3/4)
+        self.pipe = args.port-3333
         self.chip_coords = (0,0)
         self.x_shift = 16
         self.y_shift = 0

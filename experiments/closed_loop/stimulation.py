@@ -14,8 +14,6 @@ from struct import pack
 
 # Input imports
 import pygame
-sys.path.insert(1, '../../miscelaneous')
-from stimulator import update_pixel_frame, BouncingBall
 
 
 # An event frame has 32 bits <t[31]><x [30:16]><p [15]><y [14:0]>
@@ -27,10 +25,10 @@ class Stimulator:
     def __init__(self, args, end_of_sim):
         self.display = []
         self.ip_addr = args.ip
-        self.port = int(args.port)
-        self.h = int(args.height)
-        self.w = int(args.width)
-        self.mode = True # Automatic
+        self.port = args.port
+        self.w = args.width
+        self.h = int(args.width*3/4)
+        self.mode = args.mode # Automatic
         self.display_size = (346, int(self.h*346/self.w))
         self.input_q = multiprocessing.Queue()
         self.control_q = multiprocessing.Queue()
@@ -69,11 +67,11 @@ class Stimulator:
         cy = int(w*2/4)
         vx = -self.w/400
         vy = self.h/1000
-        duration = 60
+        mode = self.mode
 
 
         
-        bball = BouncingBall(dt, w, l, r, cx, cy, vx, vy)
+        bball = BouncingBall(dt, w, l, r, cx, cy, vx, vy, mode)
 
         fps = 50
         LED_f = 200
@@ -94,7 +92,7 @@ class Stimulator:
                 LED_update = 0
                 LED_on = 1 - LED_on
 
-            mat, events = update_pixel_frame(bball, LED_on)
+            mat, events = bball.update_frame(LED_on)
             if LED_on:
                 pix_mat_mp, pix_mat_np = self.shared_pix_mat
                 pix_mat_np[:,:] = np.transpose(mat)
@@ -113,11 +111,9 @@ class Stimulator:
                         dx = -1
                     if command == 'right':
                         dx = 1
-                bball.update_c(self.mode, dx, dy)
+                bball.update_center(dx, dy)
 
             
-
-            coor = [bball.cx, bball.cy]
             self.input_q.put(events)
 
             ball_update += 1
@@ -172,25 +168,43 @@ class Stimulator:
 
     def show_screen(self):
 
+        go_up = False
+        go_down = False
+        go_left = False
+        go_right = False
+
         self.display = pygame.display.set_mode(self.display_size)
         running = True
         while running:
             for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
                 if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_w:
-                        print(u"\u2191")
-                        self.control_q.put('up')
-                    if event.key == pygame.K_s:
-                        print(u"\u2193")
-                        self.control_q.put('down')
-                    if event.key == pygame.K_a:
-                        print(u"\u2190")
-                        self.control_q.put('left')
-                    if event.key == pygame.K_d:
-                        print(u"\u2192")
-                        self.control_q.put('right')
+                    if event.key == pygame.K_UP:
+                        go_up = True # print(u"\u2191")
+                    if event.key == pygame.K_DOWN:
+                        go_down = True # print(u"\u2193")
+                    if event.key == pygame.K_LEFT:
+                        go_left = True # print(u"\u2190")
+                    if event.key == pygame.K_RIGHT:
+                        go_right = True # print(u"\u2192")
+                if event.type == pygame.KEYUP:
+                    if event.key == pygame.K_UP:
+                        go_up = False
+                    if event.key == pygame.K_DOWN:
+                        go_down = False
+                    if event.key == pygame.K_LEFT:
+                        go_left = False
+                    if event.key == pygame.K_RIGHT:
+                        go_right = False
+            
+            if go_up:
+                self.control_q.put('up')
+            if go_down:
+                self.control_q.put('down')
+            if go_left:
+                self.control_q.put('left')
+            if go_right:
+                self.control_q.put('right')
+
 
             Z = self.update_screen()
             surf = pygame.surfarray.make_surface(Z)
@@ -200,3 +214,75 @@ class Stimulator:
 
             pygame.display.update()  
 
+
+class BouncingBall:
+
+    def __init__(self, dt, w, l, r, cx, cy, vx, vy, mode):
+
+        self.dt = dt
+        self.r = r
+        self.w = w
+        self.l = l
+        self.cx = cx
+        self.cy = cy
+        self.vx = vx
+        self.vy = vy
+        self.mode = mode
+
+    def update_center(self, dx=0, dy=0):
+
+        marg = 1
+
+        if self.mode == 'auto':
+            next_cx = self.cx+self.vx*self.dt
+            next_cy = self.cy+self.vy*self.dt
+        else:
+            next_cx = self.cx + dx
+            next_cy = self.cy + dy
+            
+        if self.l-self.r-marg < next_cx:
+            next_cx = self.l-self.r-marg 
+            self.vx = -self.vx
+        if marg+self.r-1 > next_cx:
+            next_cx = marg+self.r-1 
+            self.vx = -self.vx
+        self.cx = next_cx
+
+        if self.w-self.r-marg < next_cy:
+            next_cy = self.w-self.r-marg 
+            self.vy = -self.vy
+            
+        if marg+self.r-1 > next_cy:
+            next_cy = marg+self.r-1 
+            self.vy = -self.vy
+        self.cy = next_cy
+
+    def circle(self, r):
+        cir = np.zeros((2*r+1, 2*r+1))
+        idx = np.array(range(-r, r+1, 1))
+        for x in idx:
+            for y in idx:
+                d = math.sqrt(x*x+y*y)
+                if d <= r:
+                    cir[r+x, r+y] = 1         
+                    
+        return cir
+
+    def update_frame(self, LED_on):
+        
+        mat = np.zeros((self.w,self.l))
+
+        events = []
+
+        if LED_on:
+            cir = self.circle(self.r)
+            cx = int(self.cx)
+            cy = int(self.cy)
+            mat[cy-self.r:cy+self.r+1, cx-self.r:cx+self.r+1] = cir  
+
+            for y in range(cy-self.r,cy+self.r+1,1):
+                for x in range(cx-self.r,cx+self.r+1,1):
+                    events.append((x, y))
+        
+
+        return mat, events 
