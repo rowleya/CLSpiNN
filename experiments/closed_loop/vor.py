@@ -28,8 +28,6 @@ def parse_args():
 if __name__ == '__main__':
 
     args = parse_args()
-    print(args.width)
-    time.sleep(3)
         
     manager = multiprocessing.Manager()
     end_of_sim = manager.Value('i', 0)
