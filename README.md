@@ -20,5 +20,10 @@ The visualization of output layer activity is done by counting spikes in 100ms w
 Run the following example using default parameters for SPIF
 ```python3 vor.py -w 28 -r 40```
 
+The visualization of moving/blinking object and activity in the output layer should look like the following video (although less pixelated):
+<img src="images/SimSPIF.gif" width="1000">
+
+
+
 # Some help
 ```python3 vor.py -h```
