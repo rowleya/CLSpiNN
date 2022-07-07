@@ -17,13 +17,12 @@ Each of these 4 populations is then connected to two neurons: quadrant 1 (top le
 The visualization of output layer activity is done by counting spikes in 100ms windows.
 
 # Example
-Run the following example using default parameters for SPIF
-```python3 vor.py -w 28 -r 40```
+Run ```python3 vor.py``` to use default parameters:
 
 The visualization of moving/blinking object and activity in the output layer should look like the following video (although less pixelated):
 <img src="images/SimSPIF.gif" width="1000">
 
+Or run ```python3 vor.py -w 28 -r 40 -p 3333 -i 172.16.223.98 -m auto``` to 'manually' set parameters
 
-
-# Some help
+# Help?
 ```python3 vor.py -h```
