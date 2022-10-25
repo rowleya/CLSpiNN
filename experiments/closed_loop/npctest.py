@@ -9,6 +9,7 @@ import datetime
 import time
 import numpy as np
 import random
+import argparse
 from struct import pack
 
 # SpiNNaker imports
@@ -16,8 +17,6 @@ import pyNN.spiNNaker as p
 from pyNN.space import Grid2D
 
 PORT_SPIN2CPU = int(random.randint(12000,15000))
-
-
 
 
 ''' 
@@ -72,19 +71,17 @@ def create_conn_list(w_fovea, w, h, n=0):
         
     return conn_list
 
-
 class Computer:
 
-    def __init__(self, args, output_q):
+    def __init__(self, args):
         self.run_time = int(args.runtime)*1000 # in [ms]
         self.w_fovea = 8
         self.width = args.width
-        self.height = math.ceil(self.width*3/4)
+        self.height = self.width
         self.pipe = args.port-3333
         self.chip_coords = (0,0)
         self.x_shift = 16
         self.y_shift = 0
-        self.output_q = output_q
         self.subheight = max(2,2**math.ceil(math.log(math.ceil(math.log(max(2,int(self.height*self.width/256)),2)),2)))
         self.subwidth = 2*self.subheight
         self.nb_neurons_core = args.npc
@@ -105,13 +102,13 @@ class Computer:
     def __enter__(self):
 
 
-        print(f"\n\n\n\n{self.nb_neurons_core}\n\n\n\n")
         time.sleep(2)
 
         # Set up PyNN
         p.setup(timestep=1.0, n_boards_required=1)     
 
         # Set the number of neurons per core 
+
         if self.dimensions == 1:
             print(f"\n\n\n\n{self.dimensions}D: {self.nb_neurons_core}\n\n\n")
             p.set_number_of_neurons_per_core(p.IF_curr_exp, self.nb_neurons_core)
@@ -134,29 +131,42 @@ class Computer:
 
 
         motor_neurons = p.Population(len(self.labels), self.celltype(**self.cell_params), label="motor_neurons")
-        cell_conn = p.FromListConnector(create_conn_list(self.w_fovea, self.width, self.height, self.nb_neurons_core), safe=True)      
+        # cell_conn = p.FromListConnector(create_conn_list(self.w_fovea, self.width, self.height, self.nb_neurons_core), safe=True)      
+        cell_conn = p.AllToAllConnector(allow_self_connections=False) 
         con_move = p.Projection(capture, motor_neurons, cell_conn, receptor_type='excitatory')
-        # cell_conn = p.AllToAllConnector(allow_self_connections=False) 
-        # con_move = p.Projection(capture, motor_neurons, cell_conn, p.StaticSynapse(weight=8), receptor_type='excitatory')
             
-        # Spike reception (from SpiNNaker to CPU)
-        live_spikes_receiver = p.external_devices.SpynnakerLiveSpikesConnection(receive_labels=["motor_neurons"], local_port=PORT_SPIN2CPU)
-        _ = p.external_devices.activate_live_output_for(motor_neurons, database_notify_port_num=live_spikes_receiver.local_port)
-        live_spikes_receiver.add_receive_callback("motor_neurons", self.receive_spikes_from_sim)
 
     def __exit__(self, e, b, t): 
         p.end()
 
-    def receive_spikes_from_sim(self, label, time, neuron_ids):
-        
-        for n_id in neuron_ids:
-            # print(f"Spike --> MN[{n_id}]")
-            self.output_q.put(n_id, False)
 
     def run_sim(self):
         p.run(self.run_time)
         # p.external_devices.run_forever(sync_time=0)
 
-    def wrap_up(self):
-        time.sleep(1)
-        # Get recordings from populations (in case they exist)
+
+
+def parse_args():
+
+    
+    parser = argparse.ArgumentParser(description='SpiNNaker-SPIF Simulation with Artificial Data')
+
+    parser.add_argument('-r','--runtime', type=int, help="Run Time, in seconds", default=10)
+    parser.add_argument('-i', '--ip', type= str, help="SPIF's IP address", default="172.16.223.98")
+    parser.add_argument('-p', '--port', type=int, help="SPIF's port", default=3333)
+    parser.add_argument('-w', '--width', type=int, help="Image size (in px)", default=128)
+    parser.add_argument('-n', '--npc', type=int, help="# Neurons Per Core", default=24)
+    parser.add_argument('-d', '--dimensions', type=int, help="Dimensions (1D, 2D)", default=1)
+    
+    return parser.parse_args()
+   
+
+if __name__ == '__main__':
+
+    args = parse_args()
+
+    spin = Computer(args)
+
+    with spin:
+            
+        spin.run_sim()

@@ -25,7 +25,7 @@ class Stimulator:
         self.ip_addr = args.ip
         self.port = args.port
         self.w = args.width
-        self.h = int(args.width*3/4)
+        self.h = self.w+0*int(args.width*3/4)
         self.mode = args.mode # Automatic
         self.display_size = (346, int(self.h*346/self.w))
         self.input_q = multiprocessing.Queue()
@@ -59,7 +59,7 @@ class Stimulator:
         dt = 1 #ms
         l = self.w
         w = self.h
-        r = min(8, int(self.w*7/637+610/637))
+        r = min(8, 2*int(self.w*7/637+610/637))
         print(r)
         cx = int(l*1/4)
         cy = int(w*2/4)
@@ -261,7 +261,7 @@ class BouncingBall:
         for x in idx:
             for y in idx:
                 d = math.sqrt(x*x+y*y)
-                if d <= r:
+                if d <= r and d >= r*3/4:
                     cir[r+x, r+y] = 1         
                     
         return cir

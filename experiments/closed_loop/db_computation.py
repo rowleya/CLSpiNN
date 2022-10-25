@@ -79,7 +79,7 @@ class Computer:
         self.run_time = int(args.runtime)*1000 # in [ms]
         self.w_fovea = 8
         self.width = args.width
-        self.height = math.ceil(self.width*3/4)
+        self.height = int(args.width*3/4)
         self.pipe = args.port-3333
         self.chip_coords = (0,0)
         self.x_shift = 16
@@ -87,8 +87,7 @@ class Computer:
         self.output_q = output_q
         self.subheight = max(2,2**math.ceil(math.log(math.ceil(math.log(max(2,int(self.height*self.width/256)),2)),2)))
         self.subwidth = 2*self.subheight
-        self.nb_neurons_core = args.npc
-        self.dimensions = args.dimensions
+        self.nb_neurons_core = self.subheight*self.subwidth
         self.celltype = p.IF_curr_exp
         self.cell_params = {'tau_m': 20.0,
                             'tau_syn_E': 5.0,
@@ -105,21 +104,11 @@ class Computer:
     def __enter__(self):
 
 
-        print(f"\n\n\n\n{self.nb_neurons_core}\n\n\n\n")
-        time.sleep(2)
-
         # Set up PyNN
         p.setup(timestep=1.0, n_boards_required=1)     
 
         # Set the number of neurons per core 
-        if self.dimensions == 1:
-            print(f"\n\n\n\n{self.dimensions}D: {self.nb_neurons_core}\n\n\n")
-            p.set_number_of_neurons_per_core(p.IF_curr_exp, self.nb_neurons_core)
-            
-        if self.dimensions == 2:
-
-            print(f"\n\n\n\n{self.dimensions}D: ({self.nb_neurons_core},{self.nb_neurons_core})\n\n\n")
-            p.set_number_of_neurons_per_core(p.IF_curr_exp, (self.nb_neurons_core, self.nb_neurons_core))
+        p.set_number_of_neurons_per_core(p.IF_curr_exp, (self.nb_neurons_core, self.nb_neurons_core))
 
         # Set SPIF
         dev = p.Population(None, p.external_devices.SPIFRetinaDevice(
@@ -129,15 +118,13 @@ class Computer:
 
         # Create a population that captures the spikes from the input
         capture = p.Population(self.width * self.height, p.IF_curr_exp(), structure=Grid2D(self.width / self.height), label=f"Capture for device SPIF")
-        capture_conn = p.ConvolutionConnector([[1]])
-        p.Projection(dev, capture, capture_conn, p.Convolution())
+        # capture_conn = p.ConvolutionConnector([[1]])
+        # p.Projection(dev, capture, capture_conn, p.Convolution())
 
 
         motor_neurons = p.Population(len(self.labels), self.celltype(**self.cell_params), label="motor_neurons")
-        cell_conn = p.FromListConnector(create_conn_list(self.w_fovea, self.width, self.height, self.nb_neurons_core), safe=True)      
-        con_move = p.Projection(capture, motor_neurons, cell_conn, receptor_type='excitatory')
-        # cell_conn = p.AllToAllConnector(allow_self_connections=False) 
-        # con_move = p.Projection(capture, motor_neurons, cell_conn, p.StaticSynapse(weight=8), receptor_type='excitatory')
+        # cell_conn = p.FromListConnector(create_conn_list(self.w_fovea, self.width, self.height, self.nb_neurons_core), safe=True)      
+        # con_move = p.Projection(capture, motor_neurons, cell_conn, receptor_type='excitatory')
             
         # Spike reception (from SpiNNaker to CPU)
         live_spikes_receiver = p.external_devices.SpynnakerLiveSpikesConnection(receive_labels=["motor_neurons"], local_port=PORT_SPIN2CPU)
@@ -154,6 +141,8 @@ class Computer:
             self.output_q.put(n_id, False)
 
     def run_sim(self):
+        print(f"# neurons/core: {self.nb_neurons_core}")
+        time.sleep(5)
         p.run(self.run_time)
         # p.external_devices.run_forever(sync_time=0)
 
