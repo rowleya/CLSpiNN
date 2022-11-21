@@ -21,10 +21,7 @@ def parse_args():
     parser.add_argument('-p', '--port', type=int, help="SPIF's port", default=3333)
     parser.add_argument('-m', '--mode', type=str, help="Stimulus mode: auto | manual", default='auto')
     parser.add_argument('-w', '--width', type=int, help="Image size (in px)", default=24)
-    parser.add_argument('-n', '--npc', type=int, help="# Neurons Per Core", default=4)
-    parser.add_argument('-d', '--dimensions', type=int, help="Dimensions (1D, 2D)", default=1)
     
-
     return parser.parse_args()
    
 
@@ -42,13 +39,11 @@ if __name__ == '__main__':
     osci = Oscilloscope(spin.labels, output_q, end_of_sim)
 
 
-    with spin:
-        with stim:
+    with stim:
             with osci:
             
-                spin.run_sim()
+                sleep(20)
                 end_of_sim.value = 1 # Let other processes know that simulation stopped
-                spin.wrap_up()
 
     
     
