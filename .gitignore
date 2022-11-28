@@ -6,3 +6,5 @@ last_sim
 *.pyc
 *.npy
 __pycache__
+/.project
+/.pydevproject

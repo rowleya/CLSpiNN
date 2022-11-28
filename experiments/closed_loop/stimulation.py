@@ -1,5 +1,5 @@
 
-import multiprocessing 
+import multiprocessing
 import socket
 import pdb
 import math
@@ -10,8 +10,12 @@ import numpy as np
 import random
 from struct import pack
 import os
+import ctypes
+from time import sleep
+import pyNN.spiNNaker as p
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
+
 
 
 # An event frame has 32 bits <t[31]><x [30:16]><p [15]><y [14:0]>
@@ -25,7 +29,7 @@ class Stimulator:
         self.ip_addr = args.ip
         self.port = args.port
         self.w = args.width
-        self.h = self.w+0*int(args.width*3/4)
+        self.h = int(math.ceil(args.width*3/4))
         self.mode = args.mode # Automatic
         self.display_size = (346, int(self.h*346/self.w))
         self.input_q = multiprocessing.Queue()
@@ -34,25 +38,42 @@ class Stimulator:
         self.pix_mat_mp = multiprocessing.Array('I', int(np.prod((self.w, self.h))), lock=multiprocessing.Lock())
         self.pix_mat_np = np.frombuffer(self.pix_mat_mp.get_obj(), dtype='I').reshape((self.w, self.h))
         self.shared_pix_mat = (self.pix_mat_mp, self.pix_mat_np)
+        self.use_spif = not args.simulate_spif
+
+        self.running = multiprocessing.Value(ctypes.c_bool)
+        self.running.value = False
+        self.port = multiprocessing.Value(ctypes.c_uint32)
+        self.port.value = 0
+
         self.p_screen = multiprocessing.Process(target=self.show_screen, args=())
         self.p_i_data = multiprocessing.Process(target=self.set_inputs, args=())
         self.p_stream = multiprocessing.Process(target=self.launch_input_handler, args=())
+        self.p_stream.start()
+        if not self.use_spif:
+            while self.port.value == 0:
+                sleep(0.1)
 
-    
+
+
+    def start_handler(self, label, connection):
+        self.running.value = True
+
+    def end_handler(self, label, connection):
+        self.running.value = False
+
     def __enter__(self):
 
-        pygame.init()     
+        pygame.init()
         # pygame.display.set_caption("Lala")
         self.p_screen.start()
         self.p_i_data.start()
-        self.p_stream.start()
-    
-    def __exit__(self, e, b, t): 
+
+    def __exit__(self, e, b, t):
         pygame.quit()
         self.p_screen.join()
         self.p_i_data.join()
         self.p_stream.join()
-    
+
 
     def set_inputs(self):
 
@@ -68,7 +89,7 @@ class Stimulator:
         mode = self.mode
 
 
-        
+
         bball = BouncingBall(dt, w, l, r, cx, cy, vx, vy, mode)
 
         fps = 50
@@ -85,7 +106,7 @@ class Stimulator:
                 time.sleep(1)
                 print("No more inputs to be sent")
                 break
-        
+
             if LED_update >= 1000/LED_f:
                 LED_update = 0
                 LED_on = 1 - LED_on
@@ -96,22 +117,22 @@ class Stimulator:
                 pix_mat_np[:,:] = np.transpose(mat)
 
             if ball_update >= 1000/fps:
-                ball_update = 0      
+                ball_update = 0
                 dx = 0
                 dy = 0
                 while not self.control_q.empty():
                     command = self.control_q.get(False)
                     if command == 'up':
-                        dy = -1   
+                        dy = -1
                     if command == 'down':
-                        dy = 1   
+                        dy = 1
                     if command == 'left':
                         dx = -1
                     if command == 'right':
                         dx = 1
                 bball.update_center(dx, dy)
 
-            
+
             self.input_q.put(events)
 
             ball_update += 1
@@ -126,8 +147,13 @@ class Stimulator:
         NO_TIMESTAMP = 0x80000000
         polarity = 1
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
+        if self.use_spif:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        else:
+            connection = p.external_devices.SpynnakerLiveSpikesConnection(send_labels=["retina"], local_port=None)
+            self.port.value = connection.local_port
+            connection.add_start_resume_callback("retina", self.start_handler)
+            connection.add_pause_stop_callback("retina", self.end_handler)
 
         while True:
 
@@ -136,29 +162,41 @@ class Stimulator:
                 time.sleep(1)
                 print("No more events to be created")
                 break
-            
+
             events = []
             while not self.input_q.empty():
                 events = self.input_q.get(False)
 
+            if not self.running.value:
+                continue
 
-            data = b""
-            for e in events:        
+            if self.use_spif:
+                data = b""
+            else:
+                spikes = []
+
+            for e in events:
                 x = e[0]
                 y = e[1]
-            
-                packed = (
-                    NO_TIMESTAMP + (polarity << P_SHIFT) +
-                    (y << Y_SHIFT) + (x << X_SHIFT))
+                if self.use_spif:
 
-                data += pack("<I", packed)
-            sock.sendto(data, (self.ip_addr, self.port))
+                    packed = (
+                        NO_TIMESTAMP + (polarity << P_SHIFT) +
+                        (y << Y_SHIFT) + (x << X_SHIFT))
+                    data += pack("<I", packed)
+                else:
+                    spikes.append((y * self.w) + x)
+
+            if self.use_spif:
+                sock.sendto(data, (self.ip_addr, use_spifself.port))
+            elif spikes:
+                connection.send_spikes("retina", spikes)
 
 
     def update_screen(self):
 
         pix_mat_mp, pix_mat_np = self.shared_pix_mat
-        
+
         image = np.zeros((pix_mat_np.shape[0],pix_mat_np.shape[1],3))
         image[:,:,1] = pix_mat_np*255
 
@@ -193,7 +231,7 @@ class Stimulator:
                         go_left = False
                     if event.key == pygame.K_RIGHT:
                         go_right = False
-            
+
             if go_up:
                 self.control_q.put('up')
             if go_down:
@@ -210,7 +248,7 @@ class Stimulator:
 
             self.display.blit(surf, (0, 0))
 
-            pygame.display.update()  
+            pygame.display.update()
 
 
 class BouncingBall:
@@ -237,21 +275,21 @@ class BouncingBall:
         else:
             next_cx = self.cx + dx
             next_cy = self.cy + dy
-            
+
         if self.l-self.r-marg < next_cx:
-            next_cx = self.l-self.r-marg 
+            next_cx = self.l-self.r-marg
             self.vx = -self.vx
         if marg+self.r-1 > next_cx:
-            next_cx = marg+self.r-1 
+            next_cx = marg+self.r-1
             self.vx = -self.vx
         self.cx = next_cx
 
         if self.w-self.r-marg < next_cy:
-            next_cy = self.w-self.r-marg 
+            next_cy = self.w-self.r-marg
             self.vy = -self.vy
-            
+
         if marg+self.r-1 > next_cy:
-            next_cy = marg+self.r-1 
+            next_cy = marg+self.r-1
             self.vy = -self.vy
         self.cy = next_cy
 
@@ -262,12 +300,12 @@ class BouncingBall:
             for y in idx:
                 d = math.sqrt(x*x+y*y)
                 if d <= r and d >= r*3/4:
-                    cir[r+x, r+y] = 1         
-                    
+                    cir[r+x, r+y] = 1
+
         return cir
 
     def update_frame(self, LED_on):
-        
+
         mat = np.zeros((self.w,self.l))
 
         events = []
@@ -276,11 +314,11 @@ class BouncingBall:
             cir = self.circle(self.r)
             cx = int(self.cx)
             cy = int(self.cy)
-            mat[cy-self.r:cy+self.r+1, cx-self.r:cx+self.r+1] = cir  
+            mat[cy-self.r:cy+self.r+1, cx-self.r:cx+self.r+1] = cir
 
             for y in range(cy-self.r,cy+self.r+1,1):
                 for x in range(cx-self.r,cx+self.r+1,1):
                     events.append((x, y))
-        
 
-        return mat, events 
+
+        return mat, events
