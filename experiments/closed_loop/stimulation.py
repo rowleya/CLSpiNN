@@ -55,8 +55,6 @@ class Stimulator:
             while self.port.value == 0:
                 sleep(0.1)
 
-
-
     def start_handler(self, label, connection):
         self.running.value = True
 
@@ -177,7 +175,7 @@ class Stimulator:
                     spikes.append((y * self.w) + x)
 
             if self.use_spif:
-                sock.sendto(data, (self.ip_addr, use_spifself.port))
+                sock.sendto(data, (self.ip_addr, self.port))
             elif spikes:
                 connection.send_spikes("retina", spikes)
 
