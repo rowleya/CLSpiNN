@@ -23,6 +23,7 @@ def parse_args():
     parser.add_argument('-w', '--width', type=int, help="Image size (in px)", default=24)
     parser.add_argument('-n', '--npc', type=int, help="# Neurons Per Core", default=4)
     parser.add_argument('-d', '--dimensions', type=int, help="Dimensions (1D, 2D)", default=1)
+    parser.add_argument('-g', '--gui', type=int, help="Use of GUI", default=1)
     parser.add_argument('-s', '--simulate-spif', action="store_true", help="Simulate SPIF")
 
 
@@ -40,7 +41,7 @@ if __name__ == '__main__':
 
     stim = Stimulator(args, end_of_sim)
     spin = Computer(args, output_q, stim.port.value)
-    osci = Oscilloscope(spin.labels, output_q, end_of_sim)
+    osci = Oscilloscope(args, spin.labels, output_q, end_of_sim)
 
 
     with spin:

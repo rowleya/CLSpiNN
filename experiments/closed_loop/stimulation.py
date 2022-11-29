@@ -26,6 +26,7 @@ X_SHIFT = 16
 class Stimulator:
     def __init__(self, args, end_of_sim):
         self.display = []
+        self.gui = args.gui
         self.ip_addr = args.ip
         self.port = args.port
         self.w = args.width
@@ -45,7 +46,8 @@ class Stimulator:
         self.port = multiprocessing.Value(ctypes.c_uint32)
         self.port.value = 0
 
-        self.p_screen = multiprocessing.Process(target=self.show_screen, args=())
+        if self.gui == 1:
+            self.p_screen = multiprocessing.Process(target=self.show_screen, args=())
         self.p_i_data = multiprocessing.Process(target=self.set_inputs, args=())
         self.p_stream = multiprocessing.Process(target=self.launch_input_handler, args=())
         self.p_stream.start()
@@ -62,15 +64,17 @@ class Stimulator:
         self.running.value = False
 
     def __enter__(self):
-
-        pygame.init()
+        
         # pygame.display.set_caption("Lala")
-        self.p_screen.start()
+        if self.gui == 1:
+            pygame.init()   
+            self.p_screen.start()
         self.p_i_data.start()
 
     def __exit__(self, e, b, t):
-        pygame.quit()
-        self.p_screen.join()
+        if self.gui == 1:
+            pygame.quit()
+            self.p_screen.join()
         self.p_i_data.join()
         self.p_stream.join()
 
