@@ -51,5 +51,3 @@ if __name__ == '__main__':
                 spin.run_sim()
                 end_of_sim.value = 1 # Let other processes know that simulation stopped
                 spin.wrap_up()
-
-

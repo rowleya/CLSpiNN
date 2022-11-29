@@ -64,20 +64,20 @@ class Stimulator:
         self.running.value = False
 
     def __enter__(self):
-        
+
         # pygame.display.set_caption("Lala")
         if self.gui == 1:
-            pygame.init()   
+            pygame.init()
             self.p_screen.start()
         self.p_i_data.start()
 
     def __exit__(self, e, b, t):
+        self.end_of_sim.value = 1
         if self.gui == 1:
             pygame.quit()
             self.p_screen.join()
         self.p_i_data.join()
         self.p_stream.join()
-
 
     def set_inputs(self):
 
@@ -103,13 +103,7 @@ class Stimulator:
         LED_on = 1
         t = 0
 
-        while True:
-
-            # Check if the spinnaker simulation has ended
-            if self.end_of_sim.value == 1:
-                time.sleep(1)
-                print("No more inputs to be sent")
-                break
+        while self.end_of_sim.value == 0:
 
             if LED_update >= 1000/LED_f:
                 LED_update = 0
@@ -136,15 +130,13 @@ class Stimulator:
                         dx = 1
                 bball.update_center(dx, dy)
 
-
             self.input_q.put(events)
 
             ball_update += 1
             LED_update += 1
             t += 1
-
-
             time.sleep(0.0001)
+        print("No more inputs to be sent")
 
     def launch_input_handler(self):
 
@@ -159,14 +151,7 @@ class Stimulator:
             connection.add_start_resume_callback("retina", self.start_handler)
             connection.add_pause_stop_callback("retina", self.end_handler)
 
-        while True:
-
-            # Check if the spinnaker simulation has ended
-            if self.end_of_sim.value == 1:
-                time.sleep(1)
-                print("No more events to be created")
-                break
-
+        while self.end_of_sim.value == 0:
             events = []
             while not self.input_q.empty():
                 events = self.input_q.get(False)
@@ -196,6 +181,11 @@ class Stimulator:
             elif spikes:
                 connection.send_spikes("retina", spikes)
 
+        print("No more events to be created")
+        if self.use_spif:
+            sock.close()
+        else:
+            connection.close()
 
     def update_screen(self):
 

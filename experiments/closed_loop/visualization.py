@@ -47,6 +47,7 @@ class Oscilloscope:
         self.p_o_data.start()
 
     def __exit__(self, e, b, t):
+        self.end_of_sim.value = 1
         self.p_visual.join()
         self.p_o_data.join()
 
@@ -64,14 +65,7 @@ class Oscilloscope:
         for i in range(self.n):  # 4 motor neurons
             spike_times.append(collections.deque(maxlen=nb_spikes_max))
 
-        while True:
-
-            # Check if the spinnaker simulation has ended
-            if self.end_of_sim.value == 1:
-                time.sleep(1)
-                print("No more outputs to be received")
-                break
-
+        while self.end_of_sim.value == 0:
             while not self.output_q.empty():
                 out = self.output_q.get(False)
                 current_t = time.time()
@@ -89,6 +83,8 @@ class Oscilloscope:
                 self.spike_q.put(spike_count, False)
 
             time.sleep(0.005)
+
+        print("No more outputs to be received")
 
     def get_counts(self,spike_count):
 
@@ -141,7 +137,7 @@ class Oscilloscope:
     def cmdline(self):
 
         spike_count = -NB_PTS*np.ones((self.n,))
-        while(True):
+        while self.end_of_sim.value == 0:
             spike_count = self.get_counts(spike_count)
             time.sleep(0.001)
 
