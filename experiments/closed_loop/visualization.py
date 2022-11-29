@@ -1,5 +1,5 @@
 
-import multiprocessing 
+import multiprocessing
 import socket
 import pdb
 import math
@@ -15,15 +15,13 @@ import collections
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-matplotlib.use("TkAgg")
-matplotlib.rcParams['toolbar'] = 'None' 
 
 
 NB_PTS = 100
 LINE = "________________________________________"
 
 class Oscilloscope:
-    
+
     def __init__(self, args, labels, output_q, end_of_sim):
         self.fig = []
         self.axs = []
@@ -37,11 +35,13 @@ class Oscilloscope:
         self.output_q = output_q
         self.end_of_sim = end_of_sim
         if self.gui == 1:
+            matplotlib.use("TkAgg")
+            matplotlib.rcParams['toolbar'] = 'None'
             self.p_visual = multiprocessing.Process(target=self.animation, args=())
         else:
             self.p_visual = multiprocessing.Process(target=self.cmdline, args=())
         self.p_o_data = multiprocessing.Process(target=self.get_outputs, args=())
-    
+
     def __enter__(self):
         self.p_visual.start()
         self.p_o_data.start()
@@ -51,9 +51,9 @@ class Oscilloscope:
         self.p_o_data.join()
 
     def get_outputs(self):
-        
+
         dt = 0.100
-        
+
         start = time.time()
         current_t = time.time()
         next_check = current_t + dt
@@ -61,9 +61,9 @@ class Oscilloscope:
         spike_times = []
         spike_count = np.zeros((self.n,))
         nb_spikes_max = 100
-        for i in range(self.n):  # 4 motor neurons          
+        for i in range(self.n):  # 4 motor neurons
             spike_times.append(collections.deque(maxlen=nb_spikes_max))
-            
+
         while True:
 
             # Check if the spinnaker simulation has ended
@@ -77,11 +77,11 @@ class Oscilloscope:
                 current_t = time.time()
                 elapsed_t = (current_t - start)*1000
                 spike_times[out].append(elapsed_t)
-            
+
             if current_t >= next_check:
                 # print(f"Checking @ t={current_t}")
                 next_check = current_t + dt
-                for i in range(self.n):  
+                for i in range(self.n):
                     train = np.array(spike_times[i])
                     short_train = train[train>(current_t-dt-start)*1000]
                     # print(f"For MN[{i}]: {len(train)} >= {len(short_train)} (Train vs Short Train)")
@@ -94,7 +94,7 @@ class Oscilloscope:
 
         while not self.spike_q.empty():
             spike_count = self.spike_q.get(False)
-            
+
             if int(spike_count[0])>10 and int(spike_count[1])<10:
                 self.line_plt_lr = self.line_plt_lr[1:]+"^"
             if int(spike_count[0])<10 and int(spike_count[1])>10:
@@ -106,12 +106,12 @@ class Oscilloscope:
                 self.line_plt_ud = self.line_plt_ud[1:]+"_"
 
             print(self.line_plt_ud+"\t\t\t"+self.line_plt_lr+"\r", end = '')
-        
+
         return spike_count
 
     def rt_plot(self, i, mn, spike_count):
-        
-        spike_count = self.get_counts(spike_count)                
+
+        spike_count = self.get_counts(spike_count)
 
         # Add x and y to lists
         self.t.append(time.time())
@@ -137,12 +137,12 @@ class Oscilloscope:
                 print("No more data to be visualized.")
                 plt.savefig('EndOfSim.png')
                 plt.close(self.fig)
-    
+
     def cmdline(self):
 
         spike_count = -NB_PTS*np.ones((self.n,))
-        while(True):            
-            spike_count = self.get_counts(spike_count) 
+        while(True):
+            spike_count = self.get_counts(spike_count)
             time.sleep(0.001)
 
     def animation(self):
