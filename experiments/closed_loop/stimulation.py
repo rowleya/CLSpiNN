@@ -28,7 +28,7 @@ class Stimulator:
         self.display = []
         self.gui = args.gui
         self.ip_addr = args.ip
-        self.port = args.port
+        self.spif_port = args.port
         self.w = args.width
         self.h = int(math.ceil(args.width*3/4))
         self.mode = args.mode # Automatic
@@ -175,7 +175,7 @@ class Stimulator:
                     spikes.append((y * self.w) + x)
 
             if self.use_spif:
-                sock.sendto(data, (self.ip_addr, self.port))
+                sock.sendto(data, (self.ip_addr, self.spif_port))
             elif spikes:
                 connection.send_spikes("retina", spikes)
 
