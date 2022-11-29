@@ -142,6 +142,7 @@ class Stimulator:
         polarity = 1
 
         if self.use_spif:
+            print(f"Using SPIF on {self.ip_addr}:{self.spif_port}")
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         else:
             connection = p.external_devices.SpynnakerLiveSpikesConnection(send_labels=["retina"], local_port=None)
@@ -154,7 +155,7 @@ class Stimulator:
             while not self.input_q.empty():
                 events = self.input_q.get(False)
 
-            if not self.running.value:
+            if not self.use_spif and not self.running.value:
                 continue
 
             if self.use_spif:
