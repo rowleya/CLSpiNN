@@ -137,7 +137,6 @@ class Computer:
         live_spikes_receiver.add_receive_callback("motor_neurons", self.receive_spikes_from_sim)
 
     def __exit__(self, e, b, t):
-        live_spikes_receiver.close()
         p.end()
 
     def receive_spikes_from_sim(self, label, time, neuron_ids):
